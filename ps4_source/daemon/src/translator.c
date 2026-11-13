@@ -1,0 +1,1467 @@
+/*
+ * Xbox 360 to DualShock 4 Input Translator
+ * Converts Xbox 360 USB reports to PS4 OrbisPadData format
+ */
+
+#include "translator.h"
+#include "ini_parser.h"
+#include "motion_fusion.h"
+#include <string.h>
+#include <orbis/libkernel.h>
+
+/*
+ * Initialize translator with default configuration
+ */
+void translator_init(TranslatorConfig* config) {
+    if (!config) return;
+
+    config->stick_deadzone = (g_config.stick_deadzone > 0) ? g_config.stick_deadzone : DEFAULT_STICK_DEADZONE;
+    config->trigger_threshold = (g_config.trigger_threshold > 0) ? g_config.trigger_threshold : DEFAULT_TRIGGER_THRESHOLD;
+    config->invert_left_y = 1;      // PS4 Y-axis is inverted from Xbox
+    config->invert_right_y = 1;
+    if (!g_config.switch_positional) {
+        config->swap_ab = 1;        // Map Nintendo letter A->Circle, B->Cross
+        config->swap_xy = 1;
+    } else {
+        config->swap_ab = 0;
+        config->swap_xy = 0;
+    }
+}
+
+/*
+ * Convert Xbox 360 16-bit signed stick value to DS4 8-bit unsigned
+ *
+ * Xbox:  -32768 to 32767, center = 0
+ * DS4:   0 to 255, center = 128
+ */
+static inline uint8_t convert_stick_value(int16_t xbox_val) {
+    int32_t temp = (int32_t)xbox_val + 32768;
+    return (uint8_t)(temp >> 8);
+}
+
+/*
+ * Apply deadzone and response curve to stick value
+ */
+uint8_t translator_apply_deadzone(uint8_t value, uint8_t deadzone) {
+    int32_t centered = (int32_t)value - 128;
+    int32_t abs_centered = (centered < 0) ? -centered : centered;
+    if (abs_centered > 127) abs_centered = 127;
+
+    int32_t scaled = abs_centered;
+    if (deadzone > 0) {
+        if (abs_centered <= deadzone) {
+            return 128;
+        }
+        int32_t range = 127 - deadzone;
+        if (range <= 0) range = 1;
+        scaled = ((abs_centered - deadzone) * 127) / range;
+    }
+
+    int curve = g_daemon_config.stick_curve;
+    if (curve == 1) {
+        // Precision Exponential (70% quadratic + 30% linear for fine micro-aiming near center)
+        int32_t quad = (scaled * scaled) / 127;
+        scaled = (quad * 70 + scaled * 30) / 100;
+    } else if (curve == 2) {
+        // Aggressive eSports (fast initial acceleration for instant turn/strafe response)
+        int32_t fast = (scaled * (254 - scaled)) / 127;
+        scaled = (fast * 65 + scaled * 35) / 100;
+    }
+
+    if (scaled < 0) scaled = 0;
+    if (scaled > 127) scaled = 127;
+
+    if (centered < 0) {
+        int32_t out = 128 - scaled;
+        return (uint8_t)(out < 0 ? 0 : out);
+    } else {
+        int32_t out = 128 + scaled;
+        return (uint8_t)(out > 255 ? 255 : out);
+    }
+}
+
+/*
+ * Main translation function
+ */
+void translator_convert(const Xbox360Report* xbox, OrbisPadData* ds4, const TranslatorConfig* config) {
+    // Use default config if none provided
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        config = &default_config;
+    }
+
+    // Clear output structure
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // Get combined Xbox button state
+    uint16_t xbox_buttons = xbox360_get_buttons(xbox);
+
+    // ========================================
+    // ANALOG STICKS (using OpenOrbis 'stick' struct)
+    // ========================================
+
+    uint8_t lx = convert_stick_value(xbox->left_stick_x);
+    uint8_t ly = convert_stick_value(xbox->left_stick_y);
+    uint8_t rx = convert_stick_value(xbox->right_stick_x);
+    uint8_t ry = convert_stick_value(xbox->right_stick_y);
+
+    // Apply Y-axis inversion
+    if (config->invert_left_y) {
+        ly = 255 - ly;
+    }
+    if (config->invert_right_y) {
+        ry = 255 - ry;
+    }
+
+    // Apply deadzone
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    // ========================================
+    // ANALOG TRIGGERS (using OpenOrbis 'analog' struct)
+    // ========================================
+
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (xbox_buttons & XBOX360_BTN_LB) ? 255 : 0;
+        ds4->analogButtons.r2 = (xbox_buttons & XBOX360_BTN_RB) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = xbox->left_trigger;
+        ds4->analogButtons.r2 = xbox->right_trigger;
+    }
+
+    // ========================================
+    // DIGITAL BUTTONS
+    // ========================================
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons with optional swap
+    if (config->swap_ab) {
+        if (xbox_buttons & XBOX360_BTN_A) ds4_buttons |= DS4_BUTTON_CIRCLE;
+        if (xbox_buttons & XBOX360_BTN_B) ds4_buttons |= DS4_BUTTON_CROSS;
+    } else {
+        if (xbox_buttons & XBOX360_BTN_A) ds4_buttons |= DS4_BUTTON_CROSS;
+        if (xbox_buttons & XBOX360_BTN_B) ds4_buttons |= DS4_BUTTON_CIRCLE;
+    }
+
+    if (config->swap_xy) {
+        if (xbox_buttons & XBOX360_BTN_X) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+        if (xbox_buttons & XBOX360_BTN_Y) ds4_buttons |= DS4_BUTTON_SQUARE;
+    } else {
+        if (xbox_buttons & XBOX360_BTN_X) ds4_buttons |= DS4_BUTTON_SQUARE;
+        if (xbox_buttons & XBOX360_BTN_Y) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+    }
+
+    // Shoulder buttons & digital triggers
+    if (g_config.swap_triggers_bumpers) {
+        if (xbox_buttons & XBOX360_BTN_LB) ds4_buttons |= DS4_BUTTON_L2;
+        if (xbox_buttons & XBOX360_BTN_RB) ds4_buttons |= DS4_BUTTON_R2;
+        if (xbox->left_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L1;
+        }
+        if (xbox->right_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R1;
+        }
+    } else {
+        if (xbox_buttons & XBOX360_BTN_LB) ds4_buttons |= DS4_BUTTON_L1;
+        if (xbox_buttons & XBOX360_BTN_RB) ds4_buttons |= DS4_BUTTON_R1;
+        if (xbox->left_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L2;
+        }
+        if (xbox->right_trigger >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R2;
+        }
+    }
+
+    // Stick click buttons
+    if (xbox_buttons & XBOX360_BTN_L3) ds4_buttons |= DS4_BUTTON_L3;
+    if (xbox_buttons & XBOX360_BTN_R3) ds4_buttons |= DS4_BUTTON_R3;
+
+    // Menu buttons
+    if (xbox_buttons & XBOX360_BTN_START) ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (xbox_buttons & XBOX360_BTN_BACK) {
+        if (g_config.back_button_action == CONFIG_BACK_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        }
+    }
+
+    // Guide button action
+    if (xbox_buttons & XBOX360_BTN_GUIDE) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        }
+    }
+
+    // ========================================
+    // D-PAD
+    // ========================================
+
+    uint8_t xbox_dpad = xbox360_get_dpad(xbox);
+    ds4_buttons |= dpad_bits_to_buttons(xbox_dpad);
+
+    // Store final button state
+    ds4->buttons = ds4_buttons;
+
+    // ========================================
+    // STATUS & METADATA
+    // ========================================
+
+    ds4->connected = 1;
+    ds4->count = 1;
+    if (ds4->timestamp == 0) {
+        ds4->timestamp = sceKernelGetProcessTime();
+    }
+
+    // Motion data - set to neutral (offset 0x20 'vel' is acceleration in g; offset 0x2C 'acell' is angularVelocity)
+    ds4->quat.x = 0.0f;
+    ds4->quat.y = 0.0f;
+    ds4->quat.z = 0.0f;
+    ds4->quat.w = 1.0f;
+
+    ds4->acell.x = 0.0f;
+    ds4->acell.y = 0.0f;
+    ds4->acell.z = 0.0f;
+
+    ds4->vel.x = 0.0f;
+    ds4->vel.y = 0.0f;
+    ds4->vel.z = 1.0f;  // 1g downward
+
+    // Touchpad - no touches
+    ds4->touch.fingers = 0;
+}
+
+/*
+ * Simple wrapper for translation with default config
+ */
+void xbox360_to_ds4(const Xbox360Report* xbox, OrbisPadData* ds4) {
+    translator_convert(xbox, ds4, NULL);
+}
+
+/*
+ * Xbox One translation function
+ */
+void translator_convert_xboxone(const XboxOneReport* xbox, OrbisPadData* ds4, const TranslatorConfig* config) {
+    // Use default config if none provided
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        config = &default_config;
+    }
+
+    // Clear output structure
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // ========================================
+    // ANALOG STICKS (same format as Xbox 360)
+    // ========================================
+
+    uint8_t lx = convert_stick_value(xbox->left_stick_x);
+    uint8_t ly = convert_stick_value(xbox->left_stick_y);
+    uint8_t rx = convert_stick_value(xbox->right_stick_x);
+    uint8_t ry = convert_stick_value(xbox->right_stick_y);
+
+    // Apply Y-axis inversion
+    if (config->invert_left_y) {
+        ly = 255 - ly;
+    }
+    if (config->invert_right_y) {
+        ry = 255 - ry;
+    }
+
+    // Apply deadzone
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    // ========================================
+    // ANALOG TRIGGERS (Xbox One uses 10-bit, convert to 8-bit)
+    // ========================================
+
+    uint8_t lt = xboxone_trigger_to_8bit(xbox->left_trigger);
+    uint8_t rt = xboxone_trigger_to_8bit(xbox->right_trigger);
+
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (xbox->buttons_high & XBOXONE_LB) ? 255 : 0;
+        ds4->analogButtons.r2 = (xbox->buttons_high & XBOXONE_RB) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = lt;
+        ds4->analogButtons.r2 = rt;
+    }
+
+    // ========================================
+    // DIGITAL BUTTONS
+    // ========================================
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons (Xbox One layout: A/B/X/Y in buttons_low)
+    if (config->swap_ab) {
+        if (xbox->buttons_low & XBOXONE_A) ds4_buttons |= DS4_BUTTON_CIRCLE;
+        if (xbox->buttons_low & XBOXONE_B) ds4_buttons |= DS4_BUTTON_CROSS;
+    } else {
+        if (xbox->buttons_low & XBOXONE_A) ds4_buttons |= DS4_BUTTON_CROSS;
+        if (xbox->buttons_low & XBOXONE_B) ds4_buttons |= DS4_BUTTON_CIRCLE;
+    }
+
+    if (config->swap_xy) {
+        if (xbox->buttons_low & XBOXONE_X) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+        if (xbox->buttons_low & XBOXONE_Y) ds4_buttons |= DS4_BUTTON_SQUARE;
+    } else {
+        if (xbox->buttons_low & XBOXONE_X) ds4_buttons |= DS4_BUTTON_SQUARE;
+        if (xbox->buttons_low & XBOXONE_Y) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+    }
+
+    // Shoulder buttons & digital triggers
+    if (g_config.swap_triggers_bumpers) {
+        if (xbox->buttons_high & XBOXONE_LB) ds4_buttons |= DS4_BUTTON_L2;
+        if (xbox->buttons_high & XBOXONE_RB) ds4_buttons |= DS4_BUTTON_R2;
+        if (lt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L1;
+        }
+        if (rt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R1;
+        }
+    } else {
+        if (xbox->buttons_high & XBOXONE_LB) ds4_buttons |= DS4_BUTTON_L1;
+        if (xbox->buttons_high & XBOXONE_RB) ds4_buttons |= DS4_BUTTON_R1;
+        if (lt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_L2;
+        }
+        if (rt >= config->trigger_threshold) {
+            ds4_buttons |= DS4_BUTTON_R2;
+        }
+    }
+
+    // Stick click buttons (in buttons_high)
+    if (xbox->buttons_high & XBOXONE_LEFT_STICK)  ds4_buttons |= DS4_BUTTON_L3;
+    if (xbox->buttons_high & XBOXONE_RIGHT_STICK) ds4_buttons |= DS4_BUTTON_R3;
+
+    // Menu buttons (in buttons_low)
+    if (xbox->buttons_low & XBOXONE_MENU) ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (xbox->buttons_low & XBOXONE_VIEW) {
+        if (g_config.back_button_action == CONFIG_BACK_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        }
+    }
+
+    // Note: Xbox/Guide button comes in separate report (0x07), not handled here
+
+    // ========================================
+    // D-PAD (in buttons_high, same bit layout as Xbox 360)
+    // ========================================
+
+    uint8_t xbox_dpad = xboxone_get_dpad(xbox);
+    ds4_buttons |= dpad_bits_to_buttons(xbox_dpad);
+
+    // Store final button state
+    ds4->buttons = ds4_buttons;
+
+    // ========================================
+    // STATUS & METADATA
+    // ========================================
+
+    ds4->connected = 1;
+    ds4->count = 1;
+    if (ds4->timestamp == 0) {
+        ds4->timestamp = sceKernelGetProcessTime();
+    }
+
+    // Motion data - set to neutral (offset 0x20 'vel' is acceleration in g; offset 0x2C 'acell' is angularVelocity)
+    ds4->quat.x = 0.0f;
+    ds4->quat.y = 0.0f;
+    ds4->quat.z = 0.0f;
+    ds4->quat.w = 1.0f;
+
+    ds4->acell.x = 0.0f;
+    ds4->acell.y = 0.0f;
+    ds4->acell.z = 0.0f;
+
+    ds4->vel.x = 0.0f;
+    ds4->vel.y = 0.0f;
+    ds4->vel.z = 1.0f;  // 1g downward
+
+    // Touchpad - no touches
+    ds4->touch.fingers = 0;
+}
+
+/*
+ * Simple wrapper for Xbox One translation with default config
+ */
+void xboxone_to_ds4(const XboxOneReport* xbox, OrbisPadData* ds4) {
+    translator_convert_xboxone(xbox, ds4, NULL);
+}
+
+/*
+ * Convert Switch hat value to DS4 d-pad buttons
+ */
+static uint32_t switch_hat_to_dpad(uint8_t hat) {
+    switch (hat) {
+        case SWITCH_HAT_UP:
+            return DS4_BUTTON_DPAD_UP;
+        case SWITCH_HAT_UP_RIGHT:
+            return DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_RIGHT;
+        case SWITCH_HAT_RIGHT:
+            return DS4_BUTTON_DPAD_RIGHT;
+        case SWITCH_HAT_DOWN_RIGHT:
+            return DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_RIGHT;
+        case SWITCH_HAT_DOWN:
+            return DS4_BUTTON_DPAD_DOWN;
+        case SWITCH_HAT_DOWN_LEFT:
+            return DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_LEFT;
+        case SWITCH_HAT_LEFT:
+            return DS4_BUTTON_DPAD_LEFT;
+        case SWITCH_HAT_UP_LEFT:
+            return DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_LEFT;
+        default:
+            return 0;  // Centered or invalid
+    }
+}
+
+/*
+ * Switch stick normalization helper:
+ * Switch hardware ADCs and uncalibrated 12-bit/16-bit throws span only ~71% of full range
+ * (~800..3300 in 12-bit, ~38..218 in 8-bit space).
+ * Scales stick deflection from center (128) by 1.42 (142/100) to ensure cardinal directions
+ * cleanly reach 0 and 255 (full circular deflection) instead of being restricted to a 71% box.
+ */
+static inline uint8_t scale_switch_stick_axis(uint8_t val) {
+    int32_t diff = (int32_t)val - 128;
+    int32_t scaled = (diff * 142) / 100;
+    int32_t out = 128 + scaled;
+    if (out < 0) out = 0;
+    if (out > 255) out = 255;
+    return (uint8_t)out;
+}
+
+/*
+ * Switch Input-Only controller translation function
+ */
+void translator_convert_switch(const SwitchInputOnlyReport* sw, OrbisPadData* ds4, const TranslatorConfig* config) {
+    // Use default config if none provided
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        // Switch sticks don't need Y-axis inversion
+        default_config.invert_left_y = 0;
+        default_config.invert_right_y = 0;
+        config = &default_config;
+    }
+
+    // Clear output structure
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // ========================================
+    // ANALOG STICKS (normalized 8-bit 0-255 format)
+    // ========================================
+
+    uint8_t lx = scale_switch_stick_axis(sw->left_stick_x);
+    uint8_t ly = scale_switch_stick_axis(sw->left_stick_y);
+    uint8_t rx = scale_switch_stick_axis(sw->right_stick_x);
+    uint8_t ry = scale_switch_stick_axis(sw->right_stick_y);
+
+    // Apply Y-axis inversion if configured
+    if (config->invert_left_y) {
+        ly = 255 - ly;
+    }
+    if (config->invert_right_y) {
+        ry = 255 - ry;
+    }
+
+    // Apply deadzone
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    // ========================================
+    // ANALOG TRIGGERS (Switch has digital only, fake analog)
+    // ========================================
+
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (sw->buttons0 & SWITCH_BTN_L) ? 255 : 0;
+        ds4->analogButtons.r2 = (sw->buttons0 & SWITCH_BTN_R) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = (sw->buttons0 & SWITCH_BTN_ZL) ? 255 : 0;
+        ds4->analogButtons.r2 = (sw->buttons0 & SWITCH_BTN_ZR) ? 255 : 0;
+    }
+
+    // ========================================
+    // DIGITAL BUTTONS
+    // ========================================
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons - Switch uses Nintendo layout (A=East, B=South)
+    // Map to PS4 positions: A->Circle, B->Cross, X->Triangle, Y->Square
+    if (config->swap_ab) {
+        if (sw->buttons0 & SWITCH_BTN_A) ds4_buttons |= DS4_BUTTON_CROSS;
+        if (sw->buttons0 & SWITCH_BTN_B) ds4_buttons |= DS4_BUTTON_CIRCLE;
+    } else {
+        if (sw->buttons0 & SWITCH_BTN_A) ds4_buttons |= DS4_BUTTON_CIRCLE;
+        if (sw->buttons0 & SWITCH_BTN_B) ds4_buttons |= DS4_BUTTON_CROSS;
+    }
+
+    if (config->swap_xy) {
+        if (sw->buttons0 & SWITCH_BTN_X) ds4_buttons |= DS4_BUTTON_SQUARE;
+        if (sw->buttons0 & SWITCH_BTN_Y) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+    } else {
+        if (sw->buttons0 & SWITCH_BTN_X) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+        if (sw->buttons0 & SWITCH_BTN_Y) ds4_buttons |= DS4_BUTTON_SQUARE;
+    }
+
+    // Shoulder buttons & digital triggers
+    if (g_config.swap_triggers_bumpers) {
+        if (sw->buttons0 & SWITCH_BTN_L)  ds4_buttons |= DS4_BUTTON_L2;
+        if (sw->buttons0 & SWITCH_BTN_R)  ds4_buttons |= DS4_BUTTON_R2;
+        if (sw->buttons0 & SWITCH_BTN_ZL) ds4_buttons |= DS4_BUTTON_L1;
+        if (sw->buttons0 & SWITCH_BTN_ZR) ds4_buttons |= DS4_BUTTON_R1;
+    } else {
+        if (sw->buttons0 & SWITCH_BTN_L)  ds4_buttons |= DS4_BUTTON_L1;
+        if (sw->buttons0 & SWITCH_BTN_R)  ds4_buttons |= DS4_BUTTON_R1;
+        if (sw->buttons0 & SWITCH_BTN_ZL) ds4_buttons |= DS4_BUTTON_L2;
+        if (sw->buttons0 & SWITCH_BTN_ZR) ds4_buttons |= DS4_BUTTON_R2;
+    }
+
+    // Stick click buttons (byte 1)
+    if (sw->buttons1 & SWITCH_BTN_L3) ds4_buttons |= DS4_BUTTON_L3;
+    if (sw->buttons1 & SWITCH_BTN_R3) ds4_buttons |= DS4_BUTTON_R3;
+
+    // Menu buttons (byte 1)
+    if (sw->buttons1 & SWITCH_BTN_PLUS)  ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (sw->buttons1 & SWITCH_BTN_MINUS) ds4_buttons |= DS4_BUTTON_SHARE;
+
+    // Home button action
+    if (sw->buttons1 & SWITCH_BTN_HOME) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        }
+    }
+
+    // ========================================
+    // D-PAD
+    // ========================================
+
+    ds4_buttons |= switch_hat_to_dpad(sw->hat);
+
+    // Store final button state
+    ds4->buttons = ds4_buttons;
+
+    // ========================================
+    // STATUS & METADATA
+    // ========================================
+
+    ds4->connected = 1;
+    ds4->count = 1;
+    if (ds4->timestamp == 0) {
+        ds4->timestamp = sceKernelGetProcessTime();
+    }
+
+    // Motion data - set to neutral (offset 0x20 'vel' is acceleration in g; offset 0x2C 'acell' is angularVelocity)
+    ds4->quat.x = 0.0f;
+    ds4->quat.y = 0.0f;
+    ds4->quat.z = 0.0f;
+    ds4->quat.w = 1.0f;
+
+    ds4->acell.x = 0.0f;
+    ds4->acell.y = 0.0f;
+    ds4->acell.z = 0.0f;
+
+    ds4->vel.x = 0.0f;
+    ds4->vel.y = 0.0f;
+    ds4->vel.z = 1.0f;  // 1g downward
+
+    // Touchpad - no touches
+    ds4->touch.fingers = 0;
+}
+
+/*
+ * Simple wrapper for Switch translation with default config
+ */
+void switch_to_ds4(const SwitchInputOnlyReport* sw, OrbisPadData* ds4) {
+    translator_convert_switch(sw, ds4, NULL);
+}
+
+static bool is_valid_imu_sample(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz) {
+    // A physical accelerometer always measures gravity (~1g) on at least one axis.
+    // Clones without an IMU either leave accel all-zero or fill the 12 bytes with a constant dummy word.
+    if (ax == 0 && ay == 0 && az == 0) {
+        return false;
+    }
+    if (ax == ay && ay == az) {
+        uint16_t u = (uint16_t)ax;
+        if (u == 0xFFFFU || u == 0x8000U || u == 0x8080U || u == 0x7FFFU || (gx == ax && gy == ax && gz == ax)) {
+            return false;
+        }
+    }
+    if (gx == gy && gy == gz) {
+        uint16_t ug = (uint16_t)gx;
+        if (ug == 0xFFFFU || ug == 0x8000U || ug == 0x8080U || ug == 0x7FFFU) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * DualSense touchpad is 1920x1080, DualShock 4 is 1920x942 (Y 0..941).
+ */
+static uint16_t ds_touch_y_to_ds4(uint16_t raw_y) {
+    if (raw_y >= 1080) return 941;
+    return (uint16_t)(((uint32_t)raw_y * 942U) / 1080U);
+}
+
+/*
+ * Switch Pro Controller full report translation function (Reports 0x30, 0x21, 0x31)
+ */
+void translator_convert_switch_pro(const SwitchFullReport* sw, OrbisPadData* ds4, const TranslatorConfig* config) {
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        // Switch sticks don't need Y-axis inversion
+        default_config.invert_left_y = 0;
+        default_config.invert_right_y = 0;
+        config = &default_config;
+    }
+
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // Decode 12-bit analog sticks
+    uint16_t raw_lx = (uint16_t)sw->left_stick[0] | (((uint16_t)sw->left_stick[1] & 0x0F) << 8);
+    uint16_t raw_ly = (uint16_t)(sw->left_stick[1] >> 4) | (((uint16_t)sw->left_stick[2]) << 4);
+
+    uint16_t raw_rx = (uint16_t)sw->right_stick[0] | (((uint16_t)sw->right_stick[1] & 0x0F) << 8);
+    uint16_t raw_ry = (uint16_t)(sw->right_stick[1] >> 4) | (((uint16_t)sw->right_stick[2]) << 4);
+
+    // Scale 12-bit (0..4095) to 8-bit (0..255) with Switch throw normalization.
+    // In Nintendo Switch HID protocol, Y=4095 is Top and Y=0 is Bottom (standard Cartesian space).
+    // On PlayStation DS4, Y=0 is Top and Y=255 is Bottom. Invert Y to match PlayStation coordinate space.
+    uint8_t lx = scale_switch_stick_axis((uint8_t)(raw_lx >> 4));
+    uint8_t ly = scale_switch_stick_axis((uint8_t)(255 - (raw_ly >> 4)));
+    uint8_t rx = scale_switch_stick_axis((uint8_t)(raw_rx >> 4));
+    uint8_t ry = scale_switch_stick_axis((uint8_t)(255 - (raw_ry >> 4)));
+
+    // Apply Y-axis inversion if configured
+    if (config->invert_left_y) {
+        ly = 255 - ly;
+    }
+    if (config->invert_right_y) {
+        ry = 255 - ry;
+    }
+
+    // Apply deadzone
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons:
+    // btn_right:
+    // 0x01: Y (West, Square position)
+    // 0x02: X (North, Triangle position)
+    // 0x04: B (South, Cross position)
+    // 0x08: A (East, Circle position)
+    int btn_a = (sw->btn_right & 0x08) ? 1 : 0;
+    int btn_b = (sw->btn_right & 0x04) ? 1 : 0;
+    int btn_x = (sw->btn_right & 0x02) ? 1 : 0;
+    int btn_y = (sw->btn_right & 0x01) ? 1 : 0;
+
+    if (config->swap_ab) {
+        if (btn_a) ds4_buttons |= DS4_BUTTON_CROSS;
+        if (btn_b) ds4_buttons |= DS4_BUTTON_CIRCLE;
+    } else {
+        if (btn_a) ds4_buttons |= DS4_BUTTON_CIRCLE;
+        if (btn_b) ds4_buttons |= DS4_BUTTON_CROSS;
+    }
+
+    if (config->swap_xy) {
+        if (btn_x) ds4_buttons |= DS4_BUTTON_SQUARE;
+        if (btn_y) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+    } else {
+        if (btn_x) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+        if (btn_y) ds4_buttons |= DS4_BUTTON_SQUARE;
+    }
+
+    // Shoulders & triggers
+    // btn_left:
+    // 0x40: L (L1)
+    // 0x80: ZL (L2)
+    // btn_right:
+    // 0x40: R (R1)
+    // 0x80: ZR (R2)
+    int btn_l  = (sw->btn_left & 0x40) ? 1 : 0;
+    int btn_zl = (sw->btn_left & 0x80) ? 1 : 0;
+    int btn_r  = (sw->btn_right & 0x40) ? 1 : 0;
+    int btn_zr = (sw->btn_right & 0x80) ? 1 : 0;
+
+    if (g_config.swap_triggers_bumpers) {
+        if (btn_l)  ds4_buttons |= DS4_BUTTON_L2;
+        if (btn_r)  ds4_buttons |= DS4_BUTTON_R2;
+        if (btn_zl) ds4_buttons |= DS4_BUTTON_L1;
+        if (btn_zr) ds4_buttons |= DS4_BUTTON_R1;
+        ds4->analogButtons.l2 = btn_l ? 255 : 0;
+        ds4->analogButtons.r2 = btn_r ? 255 : 0;
+    } else {
+        if (btn_l)  ds4_buttons |= DS4_BUTTON_L1;
+        if (btn_r)  ds4_buttons |= DS4_BUTTON_R1;
+        if (btn_zl) ds4_buttons |= DS4_BUTTON_L2;
+        if (btn_zr) ds4_buttons |= DS4_BUTTON_R2;
+        ds4->analogButtons.l2 = btn_zl ? 255 : 0;
+        ds4->analogButtons.r2 = btn_zr ? 255 : 0;
+    }
+
+    // D-Pad (btn_left: 0x01=Down, 0x02=Up, 0x04=Right, 0x08=Left)
+    if (sw->btn_left & 0x02) {
+        ds4_buttons |= DS4_BUTTON_DPAD_UP;
+    }
+    if (sw->btn_left & 0x01) {
+        ds4_buttons |= DS4_BUTTON_DPAD_DOWN;
+    }
+    if (sw->btn_left & 0x08) {
+        ds4_buttons |= DS4_BUTTON_DPAD_LEFT;
+    }
+    if (sw->btn_left & 0x04) {
+        ds4_buttons |= DS4_BUTTON_DPAD_RIGHT;
+    }
+
+    // Sticks clicks (btn_shared: 0x08=L3, 0x04=R3)
+    if (sw->btn_shared & 0x08) ds4_buttons |= DS4_BUTTON_L3;
+    if (sw->btn_shared & 0x04) ds4_buttons |= DS4_BUTTON_R3;
+
+    // Menu buttons (btn_shared: 0x02=Plus, 0x01=Minus)
+    if (sw->btn_shared & 0x02) ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (sw->btn_shared & 0x01) ds4_buttons |= DS4_BUTTON_SHARE;
+
+    // Capture button (btn_shared: 0x20) -> Touchpad Click (Map/Inventory in games)
+    if (sw->btn_shared & 0x20) {
+        ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+    }
+
+    // Home button (btn_shared: 0x10) -> PS Button or configured guide action
+    if (sw->btn_shared & 0x10) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        } else {
+            ds4_buttons |= DS4_BUTTON_PS;
+        }
+    }
+
+    // Motion data (Report 0x30 / 0x31 includes 3 IMU samples starting at byte 13:
+    // bytes 13..24: accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z as int16_t LE)
+    ds4->quat.x = 0.0f;
+    ds4->quat.y = 0.0f;
+    ds4->quat.z = 0.0f;
+    ds4->quat.w = 1.0f;
+    ds4->acell.x = 0.0f;
+    ds4->acell.y = 0.0f;
+    ds4->acell.z = 0.0f;
+    ds4->vel.x = 0.0f;
+    ds4->vel.y = 0.0f;
+    ds4->vel.z = 1.0f;
+
+    static MotionFusionState s_sw_fusion;
+    static bool  s_sw_fusion_ready = false;
+    static bool  s_sw_have_last = false;
+    static float s_sw_last_gyro[3];
+    static float s_sw_last_accel[3];
+    if (!s_sw_fusion_ready) {
+        motion_fusion_reset(&s_sw_fusion);
+        s_sw_fusion_ready = true;
+    }
+
+    bool sw_have_motion = false;
+    float sw_gyro[3]  = { 0.0f, 0.0f, 0.0f };
+    float sw_accel[3] = { 0.0f, 0.0f, 0.0f };
+
+    if (sw->report_id == 0x30 || sw->report_id == 0x31) {
+        const uint8_t* raw = (const uint8_t*)sw;
+        // Switch Pro frame (+X forward, +Y left, +Z up) -> PS4 DS4 frame (+X right, +Y up, +Z backward)
+        // Accel: 4096 LSB = 1g; Gyro: 0.070 deg/s/LSB = 0.00122173048 rad/s/LSB
+        const float k_sw_accel = 1.0f / 4096.0f;
+        const float k_sw_gyro  = 0.00122173048f;
+        int valid_samples = 0;
+
+        // The report carries 3 IMU samples (12 bytes each) starting at byte 13: average the valid ones.
+        for (int k = 0; k < 3; k++) {
+            const uint8_t* s = raw + 13 + (k * 12);
+            int16_t sw_ax = (int16_t)((uint16_t)s[0]  | ((uint16_t)s[1]  << 8));
+            int16_t sw_ay = (int16_t)((uint16_t)s[2]  | ((uint16_t)s[3]  << 8));
+            int16_t sw_az = (int16_t)((uint16_t)s[4]  | ((uint16_t)s[5]  << 8));
+            int16_t sw_gx = (int16_t)((uint16_t)s[6]  | ((uint16_t)s[7]  << 8));
+            int16_t sw_gy = (int16_t)((uint16_t)s[8]  | ((uint16_t)s[9]  << 8));
+            int16_t sw_gz = (int16_t)((uint16_t)s[10] | ((uint16_t)s[11] << 8));
+
+            if (is_valid_imu_sample(sw_ax, sw_ay, sw_az, sw_gx, sw_gy, sw_gz)) {
+                sw_accel[0] += (float)(-sw_ay) * k_sw_accel;
+                sw_accel[1] += (float)( sw_az) * k_sw_accel;
+                sw_accel[2] += (float)(-sw_ax) * k_sw_accel;
+                sw_gyro[0]  += (float)(-sw_gy) * k_sw_gyro;
+                sw_gyro[1]  += (float)( sw_gz) * k_sw_gyro;
+                sw_gyro[2]  += (float)(-sw_gx) * k_sw_gyro;
+                valid_samples++;
+            }
+        }
+        if (valid_samples > 0) {
+            float inv = 1.0f / (float)valid_samples;
+            for (int i = 0; i < 3; i++) {
+                sw_gyro[i]  *= inv;
+                sw_accel[i] *= inv;
+                s_sw_last_gyro[i]  = sw_gyro[i];
+                s_sw_last_accel[i] = sw_accel[i];
+            }
+            s_sw_have_last = true;
+            sw_have_motion = true;
+        }
+    } else if (sw->report_id == 0x21 && s_sw_have_last) {
+        // Subcommand replies carry no IMU data: reuse the last valid sample.
+        for (int i = 0; i < 3; i++) {
+            sw_gyro[i]  = s_sw_last_gyro[i];
+            sw_accel[i] = s_sw_last_accel[i];
+        }
+        sw_have_motion = true;
+    }
+
+    if (sw_have_motion) {
+        ds4->acell.x = sw_gyro[0];
+        ds4->acell.y = sw_gyro[1];
+        ds4->acell.z = sw_gyro[2];
+        ds4->vel.x   = sw_accel[0];
+        ds4->vel.y   = sw_accel[1];
+        ds4->vel.z   = sw_accel[2];
+        motion_fusion_update(&s_sw_fusion, sw_gyro, sw_accel, sceKernelGetProcessTime());
+        ds4->quat.x = s_sw_fusion.q[0];
+        ds4->quat.y = s_sw_fusion.q[1];
+        ds4->quat.z = s_sw_fusion.q[2];
+        ds4->quat.w = s_sw_fusion.q[3];
+    } else {
+        // No usable IMU (clone without sensors, or no data yet): rest pose, restart the fusion.
+        motion_fusion_reset(&s_sw_fusion);
+        s_sw_have_last = false;
+    }
+
+    ds4->touch.fingers = 0;
+    ds4->connected = 1;
+    ds4->count = 1;
+    ds4->timestamp = sceKernelGetProcessTime();
+    ds4->buttons = ds4_buttons;
+}
+
+void translator_convert_ds3(const DS3Report* ds3, OrbisPadData* ds4, const TranslatorConfig* config) {
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        config = &default_config;
+    }
+
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // Analog sticks (DualShock 3 native coordinates match DS4: 0 = Top/Left, 255 = Bottom/Right)
+    uint8_t lx = ds3->left_stick_x;
+    uint8_t ly = ds3->left_stick_y;
+    uint8_t rx = ds3->right_stick_x;
+    uint8_t ry = ds3->right_stick_y;
+
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    // Analog triggers
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (ds3->buttons2 & 0x04) ? 255 : 0;
+        ds4->analogButtons.r2 = (ds3->buttons2 & 0x08) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = ds3->pressure_l2;
+        ds4->analogButtons.r2 = ds3->pressure_r2;
+    }
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons: Triangle(0x10), Circle(0x20), Cross(0x40), Square(0x80)
+    if (config->swap_ab) {
+        if (ds3->buttons2 & 0x40) ds4_buttons |= DS4_BUTTON_CIRCLE;
+        if (ds3->buttons2 & 0x20) ds4_buttons |= DS4_BUTTON_CROSS;
+    } else {
+        if (ds3->buttons2 & 0x40) ds4_buttons |= DS4_BUTTON_CROSS;
+        if (ds3->buttons2 & 0x20) ds4_buttons |= DS4_BUTTON_CIRCLE;
+    }
+
+    if (config->swap_xy) {
+        if (ds3->buttons2 & 0x80) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+        if (ds3->buttons2 & 0x10) ds4_buttons |= DS4_BUTTON_SQUARE;
+    } else {
+        if (ds3->buttons2 & 0x80) ds4_buttons |= DS4_BUTTON_SQUARE;
+        if (ds3->buttons2 & 0x10) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+    }
+
+    // Shoulders & Triggers
+    if (g_config.swap_triggers_bumpers) {
+        if (ds3->buttons2 & 0x04) ds4_buttons |= DS4_BUTTON_L2;
+        if (ds3->buttons2 & 0x08) ds4_buttons |= DS4_BUTTON_R2;
+        if (ds3->pressure_l2 >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_L1;
+        if (ds3->pressure_r2 >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_R1;
+    } else {
+        if (ds3->buttons2 & 0x04) ds4_buttons |= DS4_BUTTON_L1;
+        if (ds3->buttons2 & 0x08) ds4_buttons |= DS4_BUTTON_R1;
+        if (ds3->pressure_l2 >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_L2;
+        if (ds3->pressure_r2 >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_R2;
+    }
+
+    // Stick clicks (buttons1: L3=0x02, R3=0x04)
+    if (ds3->buttons1 & 0x02) ds4_buttons |= DS4_BUTTON_L3;
+    if (ds3->buttons1 & 0x04) ds4_buttons |= DS4_BUTTON_R3;
+
+    // Start / Select (buttons1: Select=0x01, Start=0x08)
+    if (ds3->buttons1 & 0x08) ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (ds3->buttons1 & 0x01) ds4_buttons |= DS4_BUTTON_SHARE;
+
+    // D-Pad (buttons1: Up=0x10, Right=0x20, Down=0x40, Left=0x80)
+    if (ds3->buttons1 & 0x10) ds4_buttons |= DS4_BUTTON_DPAD_UP;
+    if (ds3->buttons1 & 0x20) ds4_buttons |= DS4_BUTTON_DPAD_RIGHT;
+    if (ds3->buttons1 & 0x40) ds4_buttons |= DS4_BUTTON_DPAD_DOWN;
+    if (ds3->buttons1 & 0x80) ds4_buttons |= DS4_BUTTON_DPAD_LEFT;
+
+    // PS Button (buttons3 & 0x01)
+    if (ds3->buttons3 & 0x01) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        } else {
+            ds4_buttons |= DS4_BUTTON_PS;
+        }
+    }
+
+    ds4->buttons = ds4_buttons;
+    ds4->connected = 1;
+    ds4->count = 1;
+    ds4->timestamp = sceKernelGetProcessTime();
+    ds4->touch.fingers = 0;
+}
+
+void translator_convert_dualsense(const DualSenseReport* ps5, OrbisPadData* ds4, const TranslatorConfig* config) {
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        config = &default_config;
+    }
+
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // Analog sticks (DualSense native coordinates match DS4: 0 = Top/Left, 255 = Bottom/Right)
+    uint8_t lx = ps5->left_stick_x;
+    uint8_t ly = ps5->left_stick_y;
+    uint8_t rx = ps5->right_stick_x;
+    uint8_t ry = ps5->right_stick_y;
+
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    // Analog triggers
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (ps5->buttons[1] & 0x01) ? 255 : 0;
+        ds4->analogButtons.r2 = (ps5->buttons[1] & 0x02) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = ps5->left_trigger;
+        ds4->analogButtons.r2 = ps5->right_trigger;
+    }
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons: Square(0x10), Cross(0x20), Circle(0x40), Triangle(0x80)
+    if (config->swap_ab) {
+        if (ps5->buttons[0] & 0x20) ds4_buttons |= DS4_BUTTON_CIRCLE;
+        if (ps5->buttons[0] & 0x40) ds4_buttons |= DS4_BUTTON_CROSS;
+    } else {
+        if (ps5->buttons[0] & 0x20) ds4_buttons |= DS4_BUTTON_CROSS;
+        if (ps5->buttons[0] & 0x40) ds4_buttons |= DS4_BUTTON_CIRCLE;
+    }
+
+    if (config->swap_xy) {
+        if (ps5->buttons[0] & 0x10) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+        if (ps5->buttons[0] & 0x80) ds4_buttons |= DS4_BUTTON_SQUARE;
+    } else {
+        if (ps5->buttons[0] & 0x10) ds4_buttons |= DS4_BUTTON_SQUARE;
+        if (ps5->buttons[0] & 0x80) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+    }
+
+    // Shoulders & Triggers in buttons[1]:
+    // L1 = 0x01, R1 = 0x02, L2_btn = 0x04, R2_btn = 0x08
+    if (g_config.swap_triggers_bumpers) {
+        if (ps5->buttons[1] & 0x01) ds4_buttons |= DS4_BUTTON_L2;
+        if (ps5->buttons[1] & 0x02) ds4_buttons |= DS4_BUTTON_R2;
+        if (ps5->left_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_L1;
+        if (ps5->right_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_R1;
+    } else {
+        if (ps5->buttons[1] & 0x01) ds4_buttons |= DS4_BUTTON_L1;
+        if (ps5->buttons[1] & 0x02) ds4_buttons |= DS4_BUTTON_R1;
+        if (ps5->left_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_L2;
+        if (ps5->right_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_R2;
+    }
+
+    // Menu & Stick clicks in buttons[1]:
+    // Create/Share = 0x10, Options = 0x20, L3 = 0x40, R3 = 0x80
+    if (ps5->buttons[1] & 0x10) ds4_buttons |= DS4_BUTTON_SHARE;
+    if (ps5->buttons[1] & 0x20) ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (ps5->buttons[1] & 0x40) ds4_buttons |= DS4_BUTTON_L3;
+    if (ps5->buttons[1] & 0x80) ds4_buttons |= DS4_BUTTON_R3;
+
+    // D-Pad Hat Switch (lower 4 bits of buttons[0])
+    uint8_t hat = ps5->buttons[0] & 0x0F;
+    switch (hat) {
+        case 0: ds4_buttons |= DS4_BUTTON_DPAD_UP; break;
+        case 1: ds4_buttons |= DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_RIGHT; break;
+        case 2: ds4_buttons |= DS4_BUTTON_DPAD_RIGHT; break;
+        case 3: ds4_buttons |= DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_RIGHT; break;
+        case 4: ds4_buttons |= DS4_BUTTON_DPAD_DOWN; break;
+        case 5: ds4_buttons |= DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_LEFT; break;
+        case 6: ds4_buttons |= DS4_BUTTON_DPAD_LEFT; break;
+        case 7: ds4_buttons |= DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_LEFT; break;
+        default: break;
+    }
+
+    // PS Button and Touchpad click in buttons[2]:
+    // PS = 0x01, Touchpad click = 0x02
+    if (ps5->buttons[2] & 0x01) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        } else {
+            ds4_buttons |= DS4_BUTTON_PS;
+        }
+    }
+    if (ps5->buttons[2] & 0x02) {
+        ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+    }
+
+    ds4->buttons = ds4_buttons;
+
+    // Capacitive Touchpad (up to 2 points)
+    uint8_t finger_count = 0;
+    if ((ps5->touch_points[0].contact & 0x80) == 0) {
+        ds4->touch.touch[0].finger = 0;
+        ds4->touch.touch[0].x = (uint16_t)ps5->touch_points[0].x_lo | (((uint16_t)(ps5->touch_points[0].x_hi_y_lo & 0x0F)) << 8);
+        ds4->touch.touch[0].y = ds_touch_y_to_ds4((uint16_t)(ps5->touch_points[0].x_hi_y_lo >> 4) | (((uint16_t)ps5->touch_points[0].y_hi) << 4));
+        finger_count++;
+    }
+    if ((ps5->touch_points[1].contact & 0x80) == 0) {
+        ds4->touch.touch[1].finger = 1;
+        ds4->touch.touch[1].x = (uint16_t)ps5->touch_points[1].x_lo | (((uint16_t)(ps5->touch_points[1].x_hi_y_lo & 0x0F)) << 8);
+        ds4->touch.touch[1].y = ds_touch_y_to_ds4((uint16_t)(ps5->touch_points[1].x_hi_y_lo >> 4) | (((uint16_t)ps5->touch_points[1].y_hi) << 4));
+        finger_count++;
+    }
+    ds4->touch.fingers = finger_count;
+
+    // Motion data (gyro scaled from +/-2000 deg/s full scale to rad/s, accel scaled by 8192 LSB/g)
+    // In Sony ScePadData layout:
+    // - offset 0x20 ('vel')   = acceleration in g (accelerometer)
+    // - offset 0x2C ('acell') = angularVelocity in rad/s (gyroscope)
+    const float k_ds_gyro_scale = (2000.0f * 0.01745329252f) / 32768.0f;
+    ds4->quat.x = 0.0f;
+    ds4->quat.y = 0.0f;
+    ds4->quat.z = 0.0f;
+    ds4->quat.w = 1.0f;
+
+    ds4->acell.x = (float)ps5->gyro[0] * k_ds_gyro_scale;
+    ds4->acell.y = (float)ps5->gyro[1] * k_ds_gyro_scale;
+    ds4->acell.z = (float)ps5->gyro[2] * k_ds_gyro_scale;
+
+    if (ps5->accel[0] != 0 || ps5->accel[1] != 0 || ps5->accel[2] != 0) {
+        ds4->vel.x = (float)ps5->accel[0] / 8192.0f;
+        ds4->vel.y = (float)ps5->accel[1] / 8192.0f;
+        ds4->vel.z = (float)ps5->accel[2] / 8192.0f;
+    } else {
+        ds4->vel.x = 0.0f;
+        ds4->vel.y = 0.0f;
+        ds4->vel.z = 1.0f;
+    }
+
+    ds4->connected = 1;
+    ds4->count = 1;
+    ds4->timestamp = sceKernelGetProcessTime();
+}
+
+void translator_convert_stadia(const StadiaInputReport* stadia, OrbisPadData* ds4, const TranslatorConfig* config) {
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        config = &default_config;
+    }
+
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // Analog sticks (Stadia native HID coordinates: 0 = Top/Left, 255 = Bottom/Right, 128 = Center)
+    uint8_t lx = stadia->left_stick_x;
+    uint8_t ly = stadia->left_stick_y;
+    uint8_t rx = stadia->right_stick_x;
+    uint8_t ry = stadia->right_stick_y;
+
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    // Analog triggers
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (stadia->buttons_extra & 0x04) ? 255 : 0; // L1 bumper
+        ds4->analogButtons.r2 = (stadia->buttons_extra & 0x02) ? 255 : 0; // R1 bumper
+    } else {
+        ds4->analogButtons.l2 = stadia->left_trigger;
+        ds4->analogButtons.r2 = stadia->right_trigger;
+    }
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons: A=0x40, B=0x20, X=0x10, Y=0x08 in buttons_extra
+    if (config->swap_ab) {
+        if (stadia->buttons_extra & 0x40) ds4_buttons |= DS4_BUTTON_CIRCLE; // A -> Circle
+        if (stadia->buttons_extra & 0x20) ds4_buttons |= DS4_BUTTON_CROSS;  // B -> Cross
+    } else {
+        if (stadia->buttons_extra & 0x40) ds4_buttons |= DS4_BUTTON_CROSS;   // A -> Cross
+        if (stadia->buttons_extra & 0x20) ds4_buttons |= DS4_BUTTON_CIRCLE;  // B -> Circle
+    }
+
+    if (config->swap_xy) {
+        if (stadia->buttons_extra & 0x10) ds4_buttons |= DS4_BUTTON_TRIANGLE; // X -> Triangle
+        if (stadia->buttons_extra & 0x08) ds4_buttons |= DS4_BUTTON_SQUARE;   // Y -> Square
+    } else {
+        if (stadia->buttons_extra & 0x10) ds4_buttons |= DS4_BUTTON_SQUARE;   // X -> Square
+        if (stadia->buttons_extra & 0x08) ds4_buttons |= DS4_BUTTON_TRIANGLE; // Y -> Triangle
+    }
+
+    // Bumpers & Triggers
+    // L1: buttons_extra bit 2 (0x04), R1: buttons_extra bit 1 (0x02)
+    // L2: buttons_main bit 2 (0x04), R2: buttons_main bit 3 (0x08) or analog threshold
+    if (g_config.swap_triggers_bumpers) {
+        if (stadia->buttons_extra & 0x04) ds4_buttons |= DS4_BUTTON_L2;
+        if (stadia->buttons_extra & 0x02) ds4_buttons |= DS4_BUTTON_R2;
+        if (stadia->left_trigger >= config->trigger_threshold || (stadia->buttons_main & 0x04)) ds4_buttons |= DS4_BUTTON_L1;
+        if (stadia->right_trigger >= config->trigger_threshold || (stadia->buttons_main & 0x08)) ds4_buttons |= DS4_BUTTON_R1;
+    } else {
+        if (stadia->buttons_extra & 0x04) ds4_buttons |= DS4_BUTTON_L1;
+        if (stadia->buttons_extra & 0x02) ds4_buttons |= DS4_BUTTON_R1;
+        if (stadia->left_trigger >= config->trigger_threshold || (stadia->buttons_main & 0x04)) ds4_buttons |= DS4_BUTTON_L2;
+        if (stadia->right_trigger >= config->trigger_threshold || (stadia->buttons_main & 0x08)) ds4_buttons |= DS4_BUTTON_R2;
+    }
+
+    // Stick clicks: L3 (buttons_extra bit 0: 0x01), R3 (buttons_main bit 7: 0x80)
+    if (stadia->buttons_extra & 0x01) ds4_buttons |= DS4_BUTTON_L3;
+    if (stadia->buttons_main & 0x80)  ds4_buttons |= DS4_BUTTON_R3;
+
+    // Menu buttons:
+    // Menu (three lines / Start): buttons_main bit 5 (0x20) -> OPTIONS
+    // Options (three dots / Select): buttons_main bit 6 (0x40) -> SHARE
+    if (stadia->buttons_main & 0x20) ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (stadia->buttons_main & 0x40) ds4_buttons |= DS4_BUTTON_SHARE;
+
+    // Stadia logo button: buttons_main bit 4 (0x10) -> Guide button handling
+    if (stadia->buttons_main & 0x10) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        } else {
+            ds4_buttons |= DS4_BUTTON_PS;
+        }
+    }
+
+    // Capture (bit 0: 0x01) and Google Assistant (bit 1: 0x02) buttons
+    // Mapped directly to DualShock 4 Touchpad button!
+    if (stadia->buttons_main & 0x03) {
+        ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+    }
+
+    // D-Pad Hat Switch (0=Up, 1=UpRight, 2=Right, 3=DownRight, 4=Down, 5=DownLeft, 6=Left, 7=UpLeft, 8=Release)
+    switch (stadia->dpad) {
+        case 0: ds4_buttons |= DS4_BUTTON_DPAD_UP; break;
+        case 1: ds4_buttons |= DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_RIGHT; break;
+        case 2: ds4_buttons |= DS4_BUTTON_DPAD_RIGHT; break;
+        case 3: ds4_buttons |= DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_RIGHT; break;
+        case 4: ds4_buttons |= DS4_BUTTON_DPAD_DOWN; break;
+        case 5: ds4_buttons |= DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_LEFT; break;
+        case 6: ds4_buttons |= DS4_BUTTON_DPAD_LEFT; break;
+        case 7: ds4_buttons |= DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_LEFT; break;
+        default: break;
+    }
+
+    ds4->buttons = ds4_buttons;
+
+    // Capacitive Touchpad emulation: when Touchpad button is pressed, emit centered touch point
+    if (ds4_buttons & DS4_BUTTON_TOUCHPAD) {
+        ds4->touch.fingers = 1;
+        ds4->touch.touch[0].finger = 0;
+        ds4->touch.touch[0].x = 960;
+        ds4->touch.touch[0].y = 470;
+    } else {
+        ds4->touch.fingers = 0;
+    }
+
+    // Motion data - neutral
+    ds4->quat.x = 0.0f;
+    ds4->quat.y = 0.0f;
+    ds4->quat.z = 0.0f;
+    ds4->quat.w = 1.0f;
+
+    ds4->acell.x = 0.0f;
+    ds4->acell.y = 0.0f;
+    ds4->acell.z = 0.0f;
+
+    ds4->vel.x = 0.0f;
+    ds4->vel.y = 0.0f;
+    ds4->vel.z = 1.0f;  // 1g downward
+
+    ds4->connected = 1;
+    ds4->count = 1;
+    ds4->timestamp = sceKernelGetProcessTime();
+}
+
+void translator_convert_ds4(const DS4Report* rpt, OrbisPadData* ds4, const TranslatorConfig* config) {
+    TranslatorConfig default_config;
+    if (!config) {
+        translator_init(&default_config);
+        config = &default_config;
+    }
+
+    memset(ds4, 0, sizeof(OrbisPadData));
+
+    // Analog sticks (0 = Top/Left, 255 = Bottom/Right)
+    uint8_t lx = rpt->left_stick_x;
+    uint8_t ly = rpt->left_stick_y;
+    uint8_t rx = rpt->right_stick_x;
+    uint8_t ry = rpt->right_stick_y;
+
+    if (config->stick_deadzone > 0) {
+        lx = translator_apply_deadzone(lx, config->stick_deadzone);
+        ly = translator_apply_deadzone(ly, config->stick_deadzone);
+        rx = translator_apply_deadzone(rx, config->stick_deadzone);
+        ry = translator_apply_deadzone(ry, config->stick_deadzone);
+    }
+
+    ds4->leftStick.x = lx;
+    ds4->leftStick.y = ly;
+    ds4->rightStick.x = rx;
+    ds4->rightStick.y = ry;
+
+    // Analog triggers
+    if (g_config.swap_triggers_bumpers) {
+        ds4->analogButtons.l2 = (rpt->buttons[1] & 0x01) ? 255 : 0;
+        ds4->analogButtons.r2 = (rpt->buttons[1] & 0x02) ? 255 : 0;
+    } else {
+        ds4->analogButtons.l2 = rpt->left_trigger;
+        ds4->analogButtons.r2 = rpt->right_trigger;
+    }
+
+    uint32_t ds4_buttons = 0;
+
+    // Face buttons in buttons[0]:
+    // Square(0x10), Cross(0x20), Circle(0x40), Triangle(0x80)
+    if (config->swap_ab) {
+        if (rpt->buttons[0] & 0x20) ds4_buttons |= DS4_BUTTON_CIRCLE;
+        if (rpt->buttons[0] & 0x40) ds4_buttons |= DS4_BUTTON_CROSS;
+    } else {
+        if (rpt->buttons[0] & 0x20) ds4_buttons |= DS4_BUTTON_CROSS;
+        if (rpt->buttons[0] & 0x40) ds4_buttons |= DS4_BUTTON_CIRCLE;
+    }
+
+    if (config->swap_xy) {
+        if (rpt->buttons[0] & 0x10) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+        if (rpt->buttons[0] & 0x80) ds4_buttons |= DS4_BUTTON_SQUARE;
+    } else {
+        if (rpt->buttons[0] & 0x10) ds4_buttons |= DS4_BUTTON_SQUARE;
+        if (rpt->buttons[0] & 0x80) ds4_buttons |= DS4_BUTTON_TRIANGLE;
+    }
+
+    // Shoulders & Triggers in buttons[1]:
+    // L1 = 0x01, R1 = 0x02, L2_click = 0x04, R2_click = 0x08
+    if (g_config.swap_triggers_bumpers) {
+        if (rpt->buttons[1] & 0x01) ds4_buttons |= DS4_BUTTON_L2;
+        if (rpt->buttons[1] & 0x02) ds4_buttons |= DS4_BUTTON_R2;
+        if (rpt->left_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_L1;
+        if (rpt->right_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_R1;
+    } else {
+        if (rpt->buttons[1] & 0x01) ds4_buttons |= DS4_BUTTON_L1;
+        if (rpt->buttons[1] & 0x02) ds4_buttons |= DS4_BUTTON_R1;
+        if (rpt->left_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_L2;
+        if (rpt->right_trigger >= config->trigger_threshold) ds4_buttons |= DS4_BUTTON_R2;
+    }
+
+    // Menu & Stick clicks in buttons[1]:
+    // Share = 0x10, Options = 0x20, L3 = 0x40, R3 = 0x80
+    if (rpt->buttons[1] & 0x10) ds4_buttons |= DS4_BUTTON_SHARE;
+    if (rpt->buttons[1] & 0x20) ds4_buttons |= DS4_BUTTON_OPTIONS;
+    if (rpt->buttons[1] & 0x40) ds4_buttons |= DS4_BUTTON_L3;
+    if (rpt->buttons[1] & 0x80) ds4_buttons |= DS4_BUTTON_R3;
+
+    // D-Pad Hat Switch (lower 4 bits of buttons[0])
+    uint8_t hat = rpt->buttons[0] & 0x0F;
+    switch (hat) {
+        case 0: ds4_buttons |= DS4_BUTTON_DPAD_UP; break;
+        case 1: ds4_buttons |= DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_RIGHT; break;
+        case 2: ds4_buttons |= DS4_BUTTON_DPAD_RIGHT; break;
+        case 3: ds4_buttons |= DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_RIGHT; break;
+        case 4: ds4_buttons |= DS4_BUTTON_DPAD_DOWN; break;
+        case 5: ds4_buttons |= DS4_BUTTON_DPAD_DOWN | DS4_BUTTON_DPAD_LEFT; break;
+        case 6: ds4_buttons |= DS4_BUTTON_DPAD_LEFT; break;
+        case 7: ds4_buttons |= DS4_BUTTON_DPAD_UP | DS4_BUTTON_DPAD_LEFT; break;
+        default: break;
+    }
+
+    // PS Button and Touchpad click in buttons[2]:
+    // PS = 0x01, Touchpad click = 0x02
+    if (rpt->buttons[2] & 0x01) {
+        if (g_config.guide_action == CONFIG_GUIDE_TOUCHPAD) {
+            ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+        } else if (g_config.guide_action == CONFIG_GUIDE_SHARE) {
+            ds4_buttons |= DS4_BUTTON_SHARE;
+        } else {
+            ds4_buttons |= DS4_BUTTON_PS;
+        }
+    }
+    if (rpt->buttons[2] & 0x02) {
+        ds4_buttons |= DS4_BUTTON_TOUCHPAD;
+    }
+
+    ds4->buttons = ds4_buttons;
+
+    // Capacitive Touchpad (up to 2 points)
+    // Guard against zero-filled touchpad bytes on third-party clones where contact==0x00 would falsely mean active touch
+    uint8_t finger_count = 0;
+    if (rpt->num_touch_reports > 0) {
+        if ((rpt->touch_reports[0].points[0].contact & 0x80) == 0 &&
+            (rpt->touch_reports[0].points[0].contact != 0 ||
+             rpt->touch_reports[0].points[0].x_lo != 0 ||
+             rpt->touch_reports[0].points[0].x_hi_y_lo != 0 ||
+             rpt->touch_reports[0].points[0].y_hi != 0)) {
+            ds4->touch.touch[0].finger = 0;
+            ds4->touch.touch[0].x = (uint16_t)rpt->touch_reports[0].points[0].x_lo |
+                                   (((uint16_t)(rpt->touch_reports[0].points[0].x_hi_y_lo & 0x0F)) << 8);
+            ds4->touch.touch[0].y = (uint16_t)(rpt->touch_reports[0].points[0].x_hi_y_lo >> 4) |
+                                   (((uint16_t)rpt->touch_reports[0].points[0].y_hi) << 4);
+            finger_count++;
+        }
+        if ((rpt->touch_reports[0].points[1].contact & 0x80) == 0 &&
+            (rpt->touch_reports[0].points[1].contact != 0 ||
+             rpt->touch_reports[0].points[1].x_lo != 0 ||
+             rpt->touch_reports[0].points[1].x_hi_y_lo != 0 ||
+             rpt->touch_reports[0].points[1].y_hi != 0)) {
+            ds4->touch.touch[1].finger = 1;
+            ds4->touch.touch[1].x = (uint16_t)rpt->touch_reports[0].points[1].x_lo |
+                                   (((uint16_t)(rpt->touch_reports[0].points[1].x_hi_y_lo & 0x0F)) << 8);
+            ds4->touch.touch[1].y = (uint16_t)(rpt->touch_reports[0].points[1].x_hi_y_lo >> 4) |
+                                   (((uint16_t)rpt->touch_reports[0].points[1].y_hi) << 4);
+            finger_count++;
+        }
+    }
+    ds4->touch.fingers = finger_count;
+
+    // Motion data (gyro scaled from +/-2000 deg/s full scale to rad/s, accel scaled by 8192 LSB/g)
+    const float k_ds4_gyro_scale = (2000.0f * 0.01745329252f) / 32768.0f;
+    static MotionFusionState s_ds4_fusion;
+    static bool s_ds4_fusion_ready = false;
+    if (!s_ds4_fusion_ready) {
+        motion_fusion_reset(&s_ds4_fusion);
+        s_ds4_fusion_ready = true;
+    }
+    ds4->quat.x = 0.0f;
+    ds4->quat.y = 0.0f;
+    ds4->quat.z = 0.0f;
+    ds4->quat.w = 1.0f;
+
+    if (is_valid_imu_sample(rpt->accel[0], rpt->accel[1], rpt->accel[2],
+                            rpt->gyro[0], rpt->gyro[1], rpt->gyro[2])) {
+        // In Sony ScePadData: offset 0x20 'vel' is acceleration, offset 0x2C 'acell' is angularVelocity
+        ds4->acell.x = (float)rpt->gyro[0] * k_ds4_gyro_scale;
+        ds4->acell.y = (float)rpt->gyro[1] * k_ds4_gyro_scale;
+        ds4->acell.z = (float)rpt->gyro[2] * k_ds4_gyro_scale;
+        ds4->vel.x = (float)rpt->accel[0] / 8192.0f;
+        ds4->vel.y = (float)rpt->accel[1] / 8192.0f;
+        ds4->vel.z = (float)rpt->accel[2] / 8192.0f;
+
+        float ds4_gyro[3]  = { ds4->acell.x, ds4->acell.y, ds4->acell.z };
+        float ds4_accel[3] = { ds4->vel.x, ds4->vel.y, ds4->vel.z };
+        motion_fusion_update(&s_ds4_fusion, ds4_gyro, ds4_accel, sceKernelGetProcessTime());
+        ds4->quat.x = s_ds4_fusion.q[0];
+        ds4->quat.y = s_ds4_fusion.q[1];
+        ds4->quat.z = s_ds4_fusion.q[2];
+        ds4->quat.w = s_ds4_fusion.q[3];
+    } else {
+        motion_fusion_reset(&s_ds4_fusion);
+        ds4->acell.x = 0.0f;
+        ds4->acell.y = 0.0f;
+        ds4->acell.z = 0.0f;
+        ds4->vel.x = 0.0f;
+        ds4->vel.y = 0.0f;
+        ds4->vel.z = 1.0f;
+    }
+
+    ds4->connected = 1;
+    ds4->count = 1;
+    ds4->timestamp = sceKernelGetProcessTime();
+}
