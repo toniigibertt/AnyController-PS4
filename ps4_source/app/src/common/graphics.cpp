@@ -401,7 +401,7 @@ static const CachedGlyph* get_cached_glyph(FT_Face face, uint32_t codepoint)
 			cg.rows = slot->bitmap.rows;
 			cg.left = slot->bitmap_left;
 			cg.top = slot->bitmap_top;
-			cg.advanceX = slot->advance.x >> 6;
+			cg.advanceX = ((slot->advance.x + 32) >> 6) + 1;
 			int bufSize = cg.width * cg.rows;
 			if (bufSize > 0 && slot->bitmap.buffer)
 			{
@@ -410,7 +410,7 @@ static const CachedGlyph* get_cached_glyph(FT_Face face, uint32_t codepoint)
 		}
 		else
 		{
-			cg.advanceX = slot->advance.x >> 6;
+			cg.advanceX = ((slot->advance.x + 32) >> 6) + 1;
 		}
 	}
 	else

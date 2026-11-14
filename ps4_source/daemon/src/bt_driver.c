@@ -49,8 +49,8 @@ typedef struct {
     float accel_bias[3];
 } DualSenseCalibration;
 
-#define BT_INPUT_TIMEOUT_US 30000000ULL
-#define BT_PAD_GRACE_US     600000000ULL
+#define BT_INPUT_TIMEOUT_US 2500000ULL
+#define BT_PAD_GRACE_US     500000ULL
 
 typedef struct {
     uint64_t address;         // Bluetooth MAC address (0 = free entry)
@@ -737,35 +737,39 @@ static int controller_capacity(void* thread, struct CapacityArgs* args) {
             uint8_t* link = context + offset;
             if (*(volatile uint64_t*)(link + 0x30) != r->address) continue;
 
-            uint8_t* device = *(void**)(link + 0x638);
-            if (!device || ((uint64_t)device >> 48) != 0xFFFF ||
-                *(volatile uint16_t*)(device + 0x28) != 0x054C ||
-                (*(volatile uint16_t*)(device + 0x2A) != 0x0CE6 &&
-                 *(volatile uint16_t*)(device + 0x2A) != 0x0DF2)) {
-                break;
-            }
-
             uint32_t* capacity = (void*)(link + 0x1574);
             if (*capacity != 22 && *capacity != 49 && *capacity != 78) {
-                rc = 22;
-                break;
+                continue;
+            }
+
+            // If context is not yet verified, validate device VID/PID pointer at link + 0x638
+            if (s_discovered_ctx_off == 0) {
+                uint8_t* device = *(void**)(link + 0x638);
+                if (!device || ((uint64_t)device >> 48) != 0xFFFF ||
+                    *(volatile uint16_t*)(device + 0x28) != 0x054C ||
+                    (*(volatile uint16_t*)(device + 0x2A) != 0x0CE6 &&
+                     *(volatile uint16_t*)(device + 0x2A) != 0x0DF2)) {
+                    continue;
+                }
             }
 
             found_link = link;
             s_discovered_ctx_off = primary_off;
             if (r->restore) {
-                if (r->original != 22 && r->original != 49 && r->original != 78) {
-                    rc = 22;
-                    break;
+                if (r->original == 22 || r->original == 49 || r->original == 78) {
+                    *capacity = r->original;
+                    rc = 0;
                 }
-                *capacity = r->original;
-                rc = 0;
             } else {
-                r->original = *capacity;
+                if (*capacity != 78) {
+                    r->original = *capacity;
+                } else if (r->original == 0) {
+                    r->original = 22;
+                }
                 *capacity = 78;
                 rc = 0;
             }
-            break;
+            // Continue scanning remaining slots so all matching link entries for this MAC are patched
         }
     }
 
@@ -785,30 +789,30 @@ static int controller_capacity(void* thread, struct CapacityArgs* args) {
                     *(volatile uint16_t*)(device + 0x28) != 0x054C ||
                     (*(volatile uint16_t*)(device + 0x2A) != 0x0CE6 &&
                      *(volatile uint16_t*)(device + 0x2A) != 0x0DF2)) {
-                    break;
+                    continue;
                 }
 
                 uint32_t* capacity = (void*)(link + 0x1574);
                 if (*capacity != 22 && *capacity != 49 && *capacity != 78) {
-                    rc = 22;
-                    break;
+                    continue;
                 }
 
                 found_link = link;
                 s_discovered_ctx_off = cand;
                 if (r->restore) {
-                    if (r->original != 22 && r->original != 49 && r->original != 78) {
-                        rc = 22;
-                        break;
+                    if (r->original == 22 || r->original == 49 || r->original == 78) {
+                        *capacity = r->original;
+                        rc = 0;
                     }
-                    *capacity = r->original;
-                    rc = 0;
                 } else {
-                    r->original = *capacity;
+                    if (*capacity != 78) {
+                        r->original = *capacity;
+                    } else if (r->original == 0) {
+                        r->original = 22;
+                    }
                     *capacity = 78;
                     rc = 0;
                 }
-                break;
             }
             if (found_link) break;
         }
@@ -835,7 +839,7 @@ static int apply_controller_capacity(BtDevice* dev, int restore) {
     if (rc == 0) {
         if (!restore) {
             if (req.original != 78 || dev->original_capacity == 0) {
-                dev->original_capacity = req.original;
+                dev->original_capacity = req.original ? req.original : 22;
             }
             dev->capacity_patched = true;
             dev->capacity_failed = false;
@@ -844,9 +848,11 @@ static int apply_controller_capacity(BtDevice* dev, int restore) {
             dev->capacity_failed = false;
         }
     } else if (!restore) {
-        dev->capacity_failed = true;
         if (s_discovered_ctx_off == 0) {
             s_ctx_scan_failures++;
+            if (s_ctx_scan_failures >= 3) {
+                dev->capacity_failed = true;
+            }
         }
     }
     return (int)rc;
@@ -1524,6 +1530,7 @@ void bt_driver_poll_step(void) {
 
         uint64_t unique_macs[8];
         bool     mac_reinit[8];
+        bool     mac_disconnect[8];
         int      n_unique = 0;
 
         for (long pos = 0; pos + 16 <= count; pos += 16) {
@@ -1544,16 +1551,24 @@ void bt_driver_poll_step(void) {
                 u_idx = n_unique++;
                 unique_macs[u_idx] = address;
                 mac_reinit[u_idx] = false;
+                mac_disconnect[u_idx] = false;
             }
-            if (u_idx >= 0 && ev_type == 0x18) {
-                mac_reinit[u_idx] = true;
+            if (u_idx >= 0) {
+                if (ev_type == 0x18) {
+                    mac_reinit[u_idx] = true;
+                    mac_disconnect[u_idx] = false;
+                } else if (ev_type == 0x19) {
+                    mac_disconnect[u_idx] = true;
+                } else if (ev_type == 0x1F) {
+                    mac_disconnect[u_idx] = false;
+                }
             }
         }
 
         for (int u = 0; u < n_unique; ++u) {
             uint64_t address = unique_macs[u];
             if (mac_reinit[u]) {
-                BtDevice *existing = bt_dev_find(address);
+                BtDevice *existing = bt_dev_acquire(address);
                 if (existing) {
                     existing->calibration_requested = false;
                     existing->extended_mode = false;
@@ -1564,12 +1579,16 @@ void bt_driver_poll_step(void) {
                     existing->output_errors = 0;
                     existing->output_unsupported = false;
                     existing->next_output_retry_us = 0;
+                    if (g_daemon_config.dualsense_bt_mode == 1) {
+                        apply_controller_capacity(existing, 0);
+                    }
                     if (existing->connected) {
                         existing->needs_reinit = true;
                     }
                 }
             }
 
+            bool any_drained = false;
             for (int drain = 0; drain < 4; ++drain) {
                 uint8_t report[80];
                 memset(report, 0, sizeof(report));
@@ -1586,6 +1605,7 @@ void bt_driver_poll_step(void) {
                 BtDevice* dev = bt_dev_acquire(address);
                 if (!dev) break;
 
+                any_drained = true;
                 if (drain > 0 && result == dev->last_raw_len &&
                     memcmp(report, dev->last_raw_report, (size_t)result) == 0) {
                     break;
@@ -1598,6 +1618,19 @@ void bt_driver_poll_step(void) {
                     got_packet[dev_idx] = true;
                 }
                 bt_process_raw_report(dev, address, report, result, "input");
+            }
+
+            if (mac_disconnect[u] && !any_drained) {
+                BtDevice *disc_dev = bt_dev_find(address);
+                if (disc_dev && (disc_dev->connected || disc_dev->away_since != 0)) {
+                    int player = disc_dev->vpad_slot >= 0 ? vpad_get_assigned_slot_num(disc_dev->vpad_slot) : 1;
+                    daemon_log(LOG_LEVEL_INFO,
+                               "controller_disconnected: DualSense BT 0x%llX immediate disconnect event (0x19), releasing Slot %d (Player %d)",
+                               (unsigned long long)disc_dev->address, disc_dev->vpad_slot, player);
+                    bt_dev_release(disc_dev);
+                    daemon_notify("AnyController: DualSense (Jugador %d) Desconectado", player);
+                    bt_write_status_file();
+                }
             }
         }
 
@@ -1639,7 +1672,7 @@ void bt_driver_poll_step(void) {
         if (!dev->connected || !dev->address || g_daemon_config.dualsense_bt_mode != 1 || dev->output_unsupported) {
             continue;
         }
-        if (dev->needs_reinit && !dev->capacity_patched && !dev->capacity_failed) {
+        if ((dev->needs_reinit || !dev->capacity_patched) && !dev->capacity_failed) {
             if (apply_controller_capacity(dev, 0) == 0) {
                 dev->needs_reinit = false;
             }
@@ -1794,15 +1827,23 @@ int bt_driver_init(void) {
     }
 
     // 7. Register DualSense devices with Bluetooth driver (ioctl 0x8004622B)
-    // Register the (VID, PID) filter on s_bt_fd once (multiplexing up to 4 controllers by MAC address)
+    // Register up to BT_MAX_DEVICES slots so bthid accepts up to 4 simultaneous DualSense controllers
     s_bt_reg_count = 0;
-    if (bt_register_pair(SONY_VID, SONY_DUALSENSE_PID, "dualsense") == 0) {
-        s_bt_reg_count = 1;
+    for (int i = 0; i < BT_MAX_DEVICES; ++i) {
+        if (bt_register_pair(SONY_VID, SONY_DUALSENSE_PID, "dualsense") == 0) {
+            s_bt_reg_count++;
+        } else {
+            break;
+        }
     }
 
     s_bt_edge_reg_count = 0;
-    if (bt_register_pair(SONY_VID, SONY_DUALSENSE_EDGE_PID, "dualsense_edge") == 0) {
-        s_bt_edge_reg_count = 1;
+    for (int i = 0; i < BT_MAX_DEVICES; ++i) {
+        if (bt_register_pair(SONY_VID, SONY_DUALSENSE_EDGE_PID, "dualsense_edge") == 0) {
+            s_bt_edge_reg_count++;
+        } else {
+            break;
+        }
     }
 
     if (s_bt_reg_count == 0 && s_bt_edge_reg_count == 0) {

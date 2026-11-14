@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { downloadBinaryFile } from '../utils/iniGenerator';
 
-const PKG_VERSION = 'v1.3.8';
+const PKG_VERSION = 'v1.3.9';
 const VERSIONED_PKG_NAME = `Controller_Control_Center_PS4_${PKG_VERSION}.pkg`;
 const VERSIONED_ZIP_NAME = `Controller_Control_Center_PS4_Pack_${PKG_VERSION}.zip`;
 
@@ -117,9 +117,9 @@ export default function Header({
                 target="_blank"
                 rel="noreferrer"
                 className="px-2 py-0.5 text-[11px] font-mono font-semibold rounded bg-cyan-950/90 hover:bg-cyan-900 text-cyan-300 border border-cyan-500/40 transition-colors"
-                title="Repositorio Oficial en GitHub de toniigibertt (Auto-Updater v1.3.8)"
+                title="Repositorio Oficial en GitHub de toniigibertt (Auto-Updater v1.3.9)"
               >
-                v1.3.8 (01.38)
+                v1.3.9 (01.39)
               </a>
             </div>
             <p className="text-xs text-slate-400">

@@ -15,7 +15,7 @@ export function generateOneFamilyIni(cfg: AppConfig): string {
   const guideActionVal = cfg.guide_action === 1 ? 'touchpad' : 'ps';
 
   return `# ==============================================================================
-# ANYCONTROLLER Daemon - Archivo de Configuración del Sistema (v1.3.8)
+# ANYCONTROLLER Daemon - Archivo de Configuración del Sistema (v1.3.9)
 # Generado por Controller Control Center PS4 (Title ID: TONI88888)
 # Ubicación en PS4: /data/anycontroller/anycontroller.ini
 # ==============================================================================

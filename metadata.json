@@ -1,6 +1,0 @@
-{
-  "name": "OneFamily PS4 - Gestor Universal de Mandos",
-  "description": "Aplicación compañera y gestor universal de mandos USB y Bluetooth (DualSense, Xbox, Switch y Genéricos) para PlayStation 4 en español con probador de entradas, calibración de deriva y reasignación de botones.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

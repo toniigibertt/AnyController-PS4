@@ -481,8 +481,8 @@ int main() {
         uint32_t justPressed = (curButtons & ~prevButtons) | stickJustPressed;
         prevButtons = curButtons;
 
-        // Poll HID / DualSense controller status every 15 frames (4 Hz) for live battery & charging updates
-        if (frameID % 15 == 0) {
+        // Poll HID / DualSense controller status every 10 frames (6 Hz) for fast detection & live battery updates
+        if (frameID % 10 == 0) {
             HidProfile::read_status(hidStatus);
         }
         bool isHidType = (hidStatus.type == "generic_hid" ||
@@ -491,15 +491,30 @@ int main() {
                           hidStatus.type.find("HID") != std::string::npos);
         bool hasHid = (hidStatus.connected && isHidType);
 
-        // Context-aware controller tabs:
-        // Show DualSense PS5 tab ONLY when a PS5 DualSense controller is connected.
-        // Show DualShock 4 tab ONLY when using a native PS4 DualShock 4 controller (and DualSense is not active).
+        // Detect whether a PS5 DualSense controller is currently connected via ANYCONTROLLER daemon
         bool isDualSenseActive = (hidStatus.connected &&
                                   (hidStatus.type == "dualsense" ||
                                    hidStatus.type == "dualsense_bt" ||
                                    (hidStatus.vid == 0x054C && (hidStatus.pid == 0x0CE6 || hidStatus.pid == 0x0DF2))));
-        bool hasDualSense = isDualSenseActive;
-        bool hasDualShock4 = !isDualSenseActive;
+        // Keep both DualSense PS5 and DualShock 4 tabs available in sidebar so user is never locked out,
+        // and auto-switch between them whenever a DualSense connects or disconnects!
+        bool hasDualSense = true;
+
+        static int s_prevDualSenseActive = -1;
+        if (s_prevDualSenseActive == -1) {
+            s_prevDualSenseActive = isDualSenseActive ? 1 : 0;
+        } else if ((isDualSenseActive ? 1 : 0) != s_prevDualSenseActive) {
+            s_prevDualSenseActive = isDualSenseActive ? 1 : 0;
+            if (isDualSenseActive && currentTabId == TAB_DUALSHOCK4) {
+                currentTabId = TAB_DUALSENSE;
+                toastText = "Mando PS5 DualSense detectado: cambiado a pestaña DualSense PS5";
+                toastFrames = 150;
+            } else if (!isDualSenseActive && currentTabId == TAB_DUALSENSE) {
+                currentTabId = TAB_DUALSHOCK4;
+                toastText = "Usando mando PS4 DualShock 4: cambiado a pestaña DualShock 4";
+                toastFrames = 150;
+            }
+        }
 
         if (hasHid && !hidLoaded) {
             hidProfile.load(hidStatus.vid, hidStatus.pid, hidStatus.nbuttons);
@@ -508,14 +523,15 @@ int main() {
             hidLoaded = false;
         }
 
-        // Dynamically build active tab list based on the connected controller
+        // Build active tab list (both DualSense PS5 and DualShock 4 always accessible via L1/R1)
         std::vector<int> activeTabs;
         activeTabs.push_back(TAB_SETTINGS);
-        if (hasDualSense) {
+        if (isDualSenseActive) {
             activeTabs.push_back(TAB_DUALSENSE);
-        }
-        if (hasDualShock4) {
             activeTabs.push_back(TAB_DUALSHOCK4);
+        } else {
+            activeTabs.push_back(TAB_DUALSHOCK4);
+            activeTabs.push_back(TAB_DUALSENSE);
         }
         activeTabs.push_back(TAB_TESTER);
         if (hasHid) {
@@ -523,12 +539,7 @@ int main() {
         }
         activeTabs.push_back(TAB_INFO);
 
-        // If the active controller changed while viewing the controller-specific tab, switch seamlessly
-        if (currentTabId == TAB_DUALSENSE && !hasDualSense) {
-            currentTabId = TAB_DUALSHOCK4;
-        } else if (currentTabId == TAB_DUALSHOCK4 && !hasDualShock4) {
-            currentTabId = TAB_DUALSENSE;
-        } else if (currentTabId == TAB_REMAP_HID && !hasHid) {
+        if (currentTabId == TAB_REMAP_HID && !hasHid) {
             currentTabId = TAB_SETTINGS;
         }
 
@@ -544,9 +555,14 @@ int main() {
 
         AppConfig& cfg = configMgr.getConfig();
 
-        // Exit on OPTIONS or CIRCLE (suspended during Remap Test Mode and Tester Test Mode)
-        if (!remapTestMode && !tester.testMode && ((justPressed & ORBIS_PAD_BUTTON_OPTIONS) || (justPressed & ORBIS_PAD_BUTTON_CIRCLE))) {
-            break;
+        // Exit ONLY on OPTIONS (CIRCLE returns to TAB_SETTINGS instead of closing the app!)
+        if (!remapTestMode && !tester.testMode) {
+            if (justPressed & ORBIS_PAD_BUTTON_OPTIONS) {
+                break;
+            }
+            if ((justPressed & ORBIS_PAD_BUTTON_CIRCLE) && currentTabId != TAB_SETTINGS) {
+                currentTabId = TAB_SETTINGS;
+            }
         }
 
         // Tab Switching via L1 / R1 (suspended during Remap Test Mode and Tester Test Mode)
@@ -694,15 +710,13 @@ int main() {
             }
 
             if (!tester.testMode) {
-                // L3 or SHARE: Cycle between connected controller slots (never jump to disconnected slot on D-Pad/L2/R2!)
-                if (justPressed & ORBIS_PAD_BUTTON_L3) {
-                    for (int step = 1; step <= 4; step++) {
-                        int cand = (tester.selectedSlot + step) % 4;
-                        if (tester.slotConnected[cand]) {
-                            tester.selectedSlot = cand;
-                            break;
-                        }
-                    }
+                // L2 / LEFT: Previous player slot (1..4)
+                if ((justPressed & ORBIS_PAD_BUTTON_L2) || (justPressed & ORBIS_PAD_BUTTON_LEFT)) {
+                    tester.selectedSlot = (tester.selectedSlot + 3) % 4;
+                }
+                // R2 / RIGHT / L3: Next player slot (1..4)
+                if ((justPressed & ORBIS_PAD_BUTTON_R2) || (justPressed & ORBIS_PAD_BUTTON_RIGHT) || (justPressed & ORBIS_PAD_BUTTON_L3)) {
+                    tester.selectedSlot = (tester.selectedSlot + 1) % 4;
                 }
 
                 // Square: Start Vibration Test
@@ -1091,24 +1105,25 @@ int main() {
                 }
             }
         } else {
-            // In Info tab: TRIANGLE triggers PKG download if update is available
-            if ((justPressed & ORBIS_PAD_BUTTON_TRIANGLE) && updater.get_state() == UPDATER_UPDATE_AVAILABLE) {
-                updater.start_download();
-                toastText = "Descarga iniciada: anycontroller_companion.pkg -> /data/pkg/";
-                toastFrames = 180;
+            // In Info tab: TRIANGLE or CROSS triggers PKG download if update is available, or re-checks GitHub
+            if ((justPressed & ORBIS_PAD_BUTTON_TRIANGLE) || (justPressed & ORBIS_PAD_BUTTON_CROSS)) {
+                if (updater.get_state() == UPDATER_UPDATE_AVAILABLE) {
+                    updater.start_download();
+                    toastText = "Descarga iniciada en /data/pkg/ (lista para GoldHEN Package Installer)";
+                    toastFrames = 180;
+                } else if (updater.get_state() != UPDATER_CHECKING && updater.get_state() != UPDATER_DOWNLOADING) {
+                    updater.start_check();
+                    toastText = "Buscando actualizaciones en GitHub Releases...";
+                    toastFrames = 150;
+                }
             }
 
             // In Info tab: SQUARE re-runs installation & ensures files/autoboot are up-to-date
             if (justPressed & ORBIS_PAD_BUTTON_SQUARE) {
                 Installer::runInstallation();
                 notify_daemon_reload();
-                toastText = "AnyController reinstalado en /data/payloads/anycontroller.bin";
+                toastText = "Payload ANYCONTROLLER reinstalado en /data/payloads/anycontroller.bin";
                 toastFrames = 180;
-            }
-
-            // In Info tab: CROSS or LEFT returns to Settings
-            if ((justPressed & ORBIS_PAD_BUTTON_CROSS) || (justPressed & ORBIS_PAD_BUTTON_LEFT)) {
-                currentTabId = TAB_SETTINGS;
             }
         }
 
@@ -1127,7 +1142,7 @@ int main() {
         // Render UI
         ui->render(scene, cfg, currentTabId, selectedCard, toastFrames, padData, tester, toastText.c_str(),
                    hasHid, &hidStatus, &hidProfile, remapSelectedRow, remapTestMode, &updater,
-                   hasDualSense, dsSelectedCard, ds4SelectedCard, hasDualShock4);
+                   isDualSenseActive, dsSelectedCard, ds4SelectedCard, !isDualSenseActive);
 
         // Flip & VSync
         scene->SubmitFlip(frameID);

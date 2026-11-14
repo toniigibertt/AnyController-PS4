@@ -274,7 +274,7 @@ bool ConfigManager::save() {
 
     int len = snprintf(out, sizeof(out),
         "# ANYCONTROLLER Daemon - Archivo de Configuracion\n"
-        "# Generado por Controller Control Center PS4 (v1.3.8)\n"
+        "# Generado por Controller Control Center PS4 (v1.3.9)\n"
         "# Ubicacion en PS4: /data/anycontroller/anycontroller.ini\n"
         "\n"
         "[Deadzone]\n"

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Versi%C3%B3n-v1.3.8%20(01.38)-00AFFF?style=for-the-badge" alt="Versión v1.3.8"/>
+  <img src="https://img.shields.io/badge/Versi%C3%B3n-v1.3.9%20(01.39)-00AFFF?style=for-the-badge" alt="Versión v1.3.9"/>
   <img src="https://img.shields.io/badge/Payload-ANYCONTROLLER-6366F1?style=for-the-badge" alt="Payload ANYCONTROLLER"/>
   <img src="https://img.shields.io/badge/Title%20ID-TONI88888-0EA5E9?style=for-the-badge" alt="Title ID TONI88888"/>
   <img src="https://img.shields.io/badge/GoldHEN-%E2%89%A5%202.4b18.10-0070D1?style=for-the-badge&logo=playstation" alt="GoldHEN"/>
@@ -28,7 +28,7 @@ Permite conectar y personalizar mandos **Sony DualSense / DualSense Edge (PS5)**
 
 ---
 
-## ✨ Características Principales (`v1.3.8`)
+## ✨ Características Principales (`v1.3.9`)
 
 - **Multijugador Bluetooth Multi-DualSense (1 a 4 Mandos):**
   - Soporte simultáneo para múltiples mandos PS5 DualSense conectados por Bluetooth sin bloquearse ni desconectarse entre sí.
@@ -50,9 +50,9 @@ Permite conectar y personalizar mandos **Sony DualSense / DualSense Edge (PS5)**
 
 ## 📦 Instalación en PlayStation 4 (GoldHEN)
 
-1. Descarga **`Controller_Control_Center_PS4_v1.3.8.pkg`** (o el paquete completo **`Controller_Control_Center_PS4_Pack_v1.3.8.zip`**) desde [**Releases**](https://github.com/toniigibertt/AnyController-PS4/releases).
+1. Descarga **`Controller_Control_Center_PS4_v1.3.9.pkg`** (o el paquete completo **`Controller_Control_Center_PS4_Pack_v1.3.9.zip`**) desde [**Releases**](https://github.com/toniigibertt/AnyController-PS4/releases).
 2. Copia el `.pkg` a la raíz de un USB (exFAT / FAT32) o envíalo por FTP a `/data/pkg/`.
-3. En tu PS4, abre **Ajustes → GoldHEN → Package Installer** e instala **`Controller_Control_Center_PS4_v1.3.8.pkg`**.
+3. En tu PS4, abre **Ajustes → GoldHEN → Package Installer** e instala **`Controller_Control_Center_PS4_v1.3.9.pkg`**.
 4. Inicia **Controller Control Center PS4** desde el menú XMB. En el primer arranque se configurará automáticamente:
    - Payload **`ANYCONTROLLER`** en `/data/payloads/anycontroller.bin`
    - Configuración en `/data/anycontroller/anycontroller.ini`
@@ -80,7 +80,7 @@ Permite conectar y personalizar mandos **Sony DualSense / DualSense Edge (PS5)**
 # 1. Compilar el demonio ANYCONTROLLER (genera ps4_source/bin/anycontroller.bin)
 bash ps4_source/build_daemon.sh
 
-# 2. Compilar la app y empaquetar el PKG versionado (Controller_Control_Center_PS4_v1.3.8.pkg)
+# 2. Compilar la app y empaquetar el PKG versionado (Controller_Control_Center_PS4_v1.3.9.pkg)
 bash ps4_source/build_app.sh
 ```
 

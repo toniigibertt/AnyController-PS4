@@ -123,6 +123,8 @@ typedef struct {
     bool user_interacted;
     int slot_open_login_count;
     uint64_t last_remote_poll_us;
+    bool bound_to_user;
+    bool mirrored_to_slot0;
 } VPadSlotState;
 
 static VPadSlotState g_slots[VPAD_MAX_SLOTS];
@@ -543,26 +545,52 @@ static int vpad_bind_user_slot(int slot_idx, ConfigMode mode, int *out_slot, cha
     SceUserServiceUserId target_user = SCE_USER_SERVICE_USER_ID_INVALID;
     int player_slot = slot_idx + 1;
 
-    if (mode == CONFIG_MODE_AUTO) {
-        // CONFIG_MODE_AUTO:
-        // Never call sceMbusBindDeviceWithUserId in AUTO mode on any slot!
-        // Calling sceMbusBindDeviceWithUserId from the daemon desynchronizes SceShellCore's
-        // login manager and freezes the user selection screen. Let the native PS button pulse
-        // open the "Who is using this controller?" screen so SceShellCore binds the account natively.
+    if (mode == CONFIG_MODE_AUTO && slot_idx == 0) {
+        // CONFIG_MODE_AUTO on Slot 0 (Player 1):
+        // Preserve existing working Player 1 connection untouched!
         target_user = SCE_USER_SERVICE_USER_ID_INVALID;
-        player_slot = slot_idx + 1;
-        if (player_slot > 4) player_slot = 4;
+        player_slot = 1;
+        g_slots[0].bound_to_user = (num_logged_in >= 1);
     } else if (mode == CONFIG_MODE_SECONDARY || slot_idx >= 1) {
         int user_idx = (slot_idx >= 1) ? slot_idx : 1;
+        player_slot = user_idx + 1;
+        if (player_slot > 4) player_slot = 4;
+
         if (num_logged_in > user_idx) {
             target_user = valid_users[user_idx];
-            player_slot = user_idx + 1;
         } else if (num_logged_in == 1 && slot_idx >= 1 && !g_slots[0].active) {
             target_user = valid_users[0];
             player_slot = 1;
-        } else {
-            target_user = SCE_USER_SERVICE_USER_ID_INVALID;
-            player_slot = user_idx + 1;
+        } else if (p_sceUserServiceGetRegisteredUserIdList) {
+            // Try to find a registered PS4 profile that is not yet logged in and log it in for Player 2+
+            SceUserServiceRegisteredUserIdList reg_list;
+            memset(&reg_list, 0, sizeof(reg_list));
+            for (int r_i = 0; r_i < SCE_USER_SERVICE_MAX_REGISTER_USERS; r_i++) {
+                reg_list.userId[r_i] = SCE_USER_SERVICE_USER_ID_INVALID;
+            }
+            if (p_sceUserServiceGetRegisteredUserIdList(&reg_list) == 0) {
+                for (int r_i = 0; r_i < SCE_USER_SERVICE_MAX_REGISTER_USERS; r_i++) {
+                    SceUserServiceUserId cand = reg_list.userId[r_i];
+                    if (cand == SCE_USER_SERVICE_USER_ID_INVALID || cand == 0 || (uint32_t)cand == 0xFFFFFFFFU) {
+                        continue;
+                    }
+                    bool already_in = false;
+                    for (int l_i = 0; l_i < num_logged_in; l_i++) {
+                        if (valid_users[l_i] == cand) {
+                            already_in = true;
+                            break;
+                        }
+                    }
+                    if (!already_in) {
+                        int rl = p_sceUserServiceLogin ? p_sceUserServiceLogin(cand) : -1;
+                        int rm = p_sceMbusUserLogin ? p_sceMbusUserLogin(cand) : -1;
+                        daemon_log(LOG_LEVEL_INFO, "Slot %d auto-login registered user 0x%X: UserServiceLogin=0x%08X, MbusUserLogin=0x%08X",
+                                   slot_idx, cand, rl, rm);
+                        target_user = cand;
+                        break;
+                    }
+                }
+            }
         }
     } else {
         if (num_logged_in >= 1) {
@@ -578,7 +606,7 @@ static int vpad_bind_user_slot(int slot_idx, ConfigMode mode, int *out_slot, cha
 
     if (target_user != SCE_USER_SERVICE_USER_ID_INVALID && p_sceUserServiceGetUserName) {
         p_sceUserServiceGetUserName(target_user, g_slots[slot_idx].assigned_username, sizeof(g_slots[slot_idx].assigned_username));
-    } else if (mode == CONFIG_MODE_AUTO && slot_idx < num_logged_in && p_sceUserServiceGetUserName) {
+    } else if (slot_idx < num_logged_in && p_sceUserServiceGetUserName) {
         p_sceUserServiceGetUserName(valid_users[slot_idx], g_slots[slot_idx].assigned_username, sizeof(g_slots[slot_idx].assigned_username));
     }
     if (g_slots[slot_idx].assigned_username[0] == '\0') {
@@ -595,11 +623,27 @@ static int vpad_bind_user_slot(int slot_idx, ConfigMode mode, int *out_slot, cha
         int r = p_sceMbusBindDeviceWithUserId(g_slots[slot_idx].handle, target_user);
         daemon_log(LOG_LEVEL_INFO, "sceMbusBindDeviceWithUserId(slot=%d, handle=0x%X, user=0x%08X, player=%d, name='%s') = 0x%08X",
                    slot_idx, g_slots[slot_idx].handle, target_user, player_slot, g_slots[slot_idx].assigned_username, r);
-        if (r < 0) {
+        if (r == 0) {
+            g_slots[slot_idx].bound_to_user = true;
+            // Refresh login count in case a 2nd user was logged in above
+            if (p_sceUserServiceGetLoginUserIdList && p_sceUserServiceGetLoginUserIdList(&list) == 0) {
+                int new_cnt = 0;
+                for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) {
+                    if (list.userId[i] != SCE_USER_SERVICE_USER_ID_INVALID && list.userId[i] != 0 && (uint32_t)list.userId[i] != 0xFFFFFFFFU) {
+                        new_cnt++;
+                    }
+                }
+                s_last_login_count = new_cnt;
+            }
+        } else {
+            g_slots[slot_idx].bound_to_user = false;
             daemon_log(LOG_LEVEL_WARN, "sceMbusBindDeviceWithUserId failed (0x%08X) — falling back to PS button pulse", r);
             vpad_pulse_ps_button_slot(slot_idx);
         }
     } else {
+        if (slot_idx >= 1) {
+            g_slots[slot_idx].bound_to_user = false;
+        }
         daemon_log(LOG_LEVEL_INFO, "Virtual DS4 slot %d awaiting user selection (mode=%d, player=%d) — pulsing PS button",
                    slot_idx, mode, player_slot);
         vpad_pulse_ps_button_slot(slot_idx);
@@ -668,10 +712,14 @@ void vpad_reopen_user_picker_slot(int slot) {
     if (slot < 0 || slot >= VPAD_MAX_SLOTS || !g_slots[slot].active || g_slots[slot].handle < 0) {
         return;
     }
-    daemon_log(LOG_LEVEL_INFO, "vpad_reopen_user_picker_slot(%d): Pulsing PS button on handle=0x%X to open native PS4 user picker",
+    daemon_log(LOG_LEVEL_INFO, "vpad_reopen_user_picker_slot(%d): Binding/opening Quick Menu on handle=0x%X",
                slot, g_slots[slot].handle);
     g_slots[slot].ps_followup_pending = false;
-    vpad_schedule_ps_pulse_slot(slot, 0, 160000ULL);
+    if (slot >= 1) {
+        vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
+    }
+    // Hold PS button for 1.15s to open PS4 Quick Menu (Alimentación -> Cambiar de usuario) without minimizing the app
+    vpad_schedule_ps_pulse_slot(slot, 0, 1150000ULL);
 }
 
 void vpad_pulse_ps_button(void) {
@@ -934,9 +982,10 @@ bool vpad_check_user_rebind(ConfigMode mode) {
                 if (p_scePadSetConnection) {
                     p_scePadSetConnection(g_slots[i].handle, 1);
                 }
-                if (mode != CONFIG_MODE_AUTO) {
+                if (mode != CONFIG_MODE_AUTO || i >= 1) {
                     vpad_bind_user_slot(i, mode, NULL, NULL, 0);
                 } else {
+                    g_slots[0].bound_to_user = (num_logged_in >= 1);
                     if (i < num_logged_in && p_sceUserServiceGetUserName) {
                         g_slots[i].assigned_username[0] = '\0';
                         p_sceUserServiceGetUserName(valid_users[i], g_slots[i].assigned_username, sizeof(g_slots[i].assigned_username));
@@ -1178,8 +1227,10 @@ int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
         g_slots[slot].ps_followup_at_us = daemon_sys_time_us() + 1800000ULL;
     }
 
-    if (g_daemon_config.mode != CONFIG_MODE_AUTO) {
+    if (g_daemon_config.mode != CONFIG_MODE_AUTO || slot >= 1) {
         vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
+    } else {
+        g_slots[0].bound_to_user = (cur_logins >= 1);
     }
 
     if (out_slot) *out_slot = slot;
@@ -1378,6 +1429,30 @@ int vpad_send_data_slot(int slot, const OrbisPadData *data) {
     s->last_send_time_us = now;
     s->last_sent_data = send_data;
     s->has_sent_first = true;
+
+    // Fallback for 2nd+ DualSense (slot >= 1):
+    // When only 1 PS4 user is logged in (or slot >= 1 is not bound to a separate logged-in user),
+    // also mirror active inputs from slot >= 1 onto slot 0's virtual pad handle so the 2nd DualSense
+    // immediately controls the PS4 UI / app / single-player game instead of doing nothing.
+    // As soon as a 2nd user logs in (s_last_login_count > slot && s->bound_to_user), each controller is 100% independent.
+    if (slot >= 1 && g_slots[0].active && g_slots[0].handle >= 0 &&
+        (s_last_login_count <= slot || !s->bound_to_user)) {
+        if (!is_neutral) {
+            OrbisPadData mirror_data = send_data;
+            if (++g_slots[0].packet_counter == 0) g_slots[0].packet_counter = 1;
+            p_scePadVirtualDeviceInsertData(g_slots[0].handle, &mirror_data);
+            g_slots[0].last_send_time_us = now;
+            g_slots[0].last_sent_data = mirror_data;
+            s->mirrored_to_slot0 = true;
+        } else if (s->mirrored_to_slot0) {
+            OrbisPadData rel_data = send_data;
+            if (++g_slots[0].packet_counter == 0) g_slots[0].packet_counter = 1;
+            p_scePadVirtualDeviceInsertData(g_slots[0].handle, &rel_data);
+            g_slots[0].last_send_time_us = now;
+            g_slots[0].last_sent_data = rel_data;
+            s->mirrored_to_slot0 = false;
+        }
+    }
 
     int ps_now = (send_data.buttons & DS4_BUTTON_PS) ? 1 : 0;
     if (ps_now != s->last_ps_state) {
