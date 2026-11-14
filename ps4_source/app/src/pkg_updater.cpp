@@ -364,12 +364,11 @@ bool PkgUpdater::query_latest_release(std::string& outTag, std::string& outPkgUr
             continue; // Pre-release tags strictly ignored
         }
 
-        // 2. Look for matching PKG in assets (versioned Controller_Control_Center_PS4 preferred)
-        size_t pkgPos = jsonBody.find("Controller_Control_Center_PS4");
+        // 2. Look for matching .pkg in assets (never match .zip archives!)
+        std::string versionedPkg = "Controller_Control_Center_PS4_" + outTag + ".pkg\"";
+        size_t pkgPos = jsonBody.find(versionedPkg);
         if (pkgPos == std::string::npos) pkgPos = jsonBody.find("\"anycontroller_companion.pkg\"");
-        if (pkgPos == std::string::npos) pkgPos = jsonBody.find("anycontroller_companion.pkg");
         if (pkgPos == std::string::npos) pkgPos = jsonBody.find("\"anycontroller_ps4.pkg\"");
-        if (pkgPos == std::string::npos) pkgPos = jsonBody.find("anycontroller_ps4.pkg");
         if (pkgPos == std::string::npos) pkgPos = jsonBody.find(".pkg\"");
         if (pkgPos == std::string::npos) continue;
 
