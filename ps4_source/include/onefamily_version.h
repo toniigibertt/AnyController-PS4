@@ -8,11 +8,11 @@
 
 #define ONEFAMILY_VERSION_MAJOR     1
 #define ONEFAMILY_VERSION_MINOR     4
-#define ONEFAMILY_VERSION_PATCH     0
-#define ONEFAMILY_VERSION_RAW       "1.4.0"
-#define ONEFAMILY_VERSION_STRING    "v1.4.0"
-#define ONEFAMILY_VERSION_SFO       "01.40"
-#define ONEFAMILY_VERSION_TITLE     "Controller Control Center PS4 - Aislamiento DualSense P2, Persistencia LED y Guías"
-#define ONEFAMILY_VERSION_FULL      "v1.4.0 (Controller Control Center PS4)"
+#define ONEFAMILY_VERSION_PATCH     1
+#define ONEFAMILY_VERSION_RAW       "1.4.1"
+#define ONEFAMILY_VERSION_STRING    "v1.4.1"
+#define ONEFAMILY_VERSION_SFO       "01.41"
+#define ONEFAMILY_VERSION_TITLE     "Controller Control Center PS4 - Laboratorio 3D DualSense y DualShock 4"
+#define ONEFAMILY_VERSION_FULL      "v1.4.1 (Controller Control Center PS4)"
 
 #endif // ONEFAMILY_VERSION_H

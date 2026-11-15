@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Versi%C3%B3n-v1.4.0%20(01.40)-00AFFF?style=for-the-badge" alt="Versión v1.4.0"/>
+  <img src="https://img.shields.io/badge/Versi%C3%B3n-v1.4.1%20(01.41)-00AFFF?style=for-the-badge" alt="Versión v1.4.1"/>
   <img src="https://img.shields.io/badge/Payload-ANYCONTROLLER-6366F1?style=for-the-badge" alt="Payload ANYCONTROLLER"/>
   <img src="https://img.shields.io/badge/Title%20ID-TONI88888-0EA5E9?style=for-the-badge" alt="Title ID TONI88888"/>
   <img src="https://img.shields.io/badge/GoldHEN-%E2%89%A5%202.4b18.10-0070D1?style=for-the-badge&logo=playstation" alt="GoldHEN"/>
@@ -28,7 +28,7 @@ Permite conectar y personalizar mandos **Sony DualSense / DualSense Edge (PS5)**
 
 ---
 
-## ✨ Características Principales (`v1.4.0`)
+## ✨ Características Principales (`v1.4.1`)
 
 - **Multijugador Bluetooth Multi-DualSense (1 a 4 Mandos):**
   - Soporte simultáneo para múltiples mandos PS5 DualSense conectados por Bluetooth sin bloquearse ni desconectarse entre sí.
@@ -40,9 +40,8 @@ Permite conectar y personalizar mandos **Sony DualSense / DualSense Edge (PS5)**
   - Modo Bluetooth configurable: **Seguro (10B)** o **Extendido (78B)** con giroscopio, acelerómetro y panel táctil.
 - **Personalización Nativa DualShock 4 (PS4):**
   - Control de color, brillo por hardware, apagado completo del LED (`0%`), potencia de vibración, modo touchpad y filtro de giroscopio.
-- **Ajustes Globales y Laboratorio de Mandos:**
-  - Perfiles Pro instantáneos (`eSports FPS`, `SimRacing`, `Modo Eco`, `Estándar`), zona muerta anti-drift, curvas de sticks, umbral de gatillos, turbo/fuego rápido e intercambio `L1/L2` y `R1/R2`.
-  - Probador en tiempo real (sticks, gatillos, cruceta, touchpad, vibración y calibración automática de deriva) y editor de mapeo USB HID.
+- **Laboratorio 3D Interactivo (DualSense PS5 y DualShock 4 PS4):**
+  - Mando en **3D animado en tiempo real** que cambia automáticamente entre DualSense PS5 y DualShock 4, inclina las palancas, gira los gatillos `L2/R2`, sincroniza la barra LED RGB e ilumina con ondas animadas cada botón o vibración háptica.
 - **Actualizador Online Integrado (GitHub Releases):**
   - Comprueba nuevas versiones estables desde la propia PS4 y descarga los paquetes versionados (`Controller_Control_Center_PS4_vX.Y.Z.pkg`) en `/data/pkg/`.
 
@@ -50,9 +49,9 @@ Permite conectar y personalizar mandos **Sony DualSense / DualSense Edge (PS5)**
 
 ## 📦 Instalación en PlayStation 4 (GoldHEN)
 
-1. Descarga **`Controller_Control_Center_PS4_v1.4.0.pkg`** (o el paquete completo **`Controller_Control_Center_PS4_Pack_v1.4.0.zip`**) desde [**Releases**](https://github.com/toniigibertt/AnyController-PS4/releases).
+1. Descarga **`Controller_Control_Center_PS4_v1.4.1.pkg`** (o el paquete completo **`Controller_Control_Center_PS4_Pack_v1.4.1.zip`**) desde [**Releases**](https://github.com/toniigibertt/AnyController-PS4/releases).
 2. Copia el `.pkg` a la raíz de un USB (exFAT / FAT32) o envíalo por FTP a `/data/pkg/`.
-3. En tu PS4, abre **Ajustes → GoldHEN → Package Installer** e instala **`Controller_Control_Center_PS4_v1.4.0.pkg`**.
+3. En tu PS4, abre **Ajustes → GoldHEN → Package Installer** e instala **`Controller_Control_Center_PS4_v1.4.1.pkg`**.
 4. Inicia **Controller Control Center PS4** desde el menú XMB. En el primer arranque se configurará automáticamente:
    - Payload **`ANYCONTROLLER`** en `/data/payloads/anycontroller.bin`
    - Configuración en `/data/anycontroller/anycontroller.ini`
@@ -80,7 +79,7 @@ Permite conectar y personalizar mandos **Sony DualSense / DualSense Edge (PS5)**
 # 1. Compilar el demonio ANYCONTROLLER (genera ps4_source/bin/anycontroller.bin)
 bash ps4_source/build_daemon.sh
 
-# 2. Compilar la app y empaquetar el PKG versionado (Controller_Control_Center_PS4_v1.4.0.pkg)
+# 2. Compilar la app y empaquetar el PKG versionado (Controller_Control_Center_PS4_v1.4.1.pkg)
 bash ps4_source/build_app.sh
 ```
 

@@ -61,7 +61,7 @@ export default function InfoTab({
           { id: 'overview', label: 'Resumen y Estado', icon: Info },
           { id: 'guides', label: 'Guía de Conexión y Atajos', icon: BookOpen },
           { id: 'ini', label: 'Visor y Editor .INI', icon: FileText },
-          { id: 'changelog', label: 'Novedades y Mejoras (v1.4.0)', icon: Sparkles },
+          { id: 'changelog', label: 'Novedades y Mejoras (v1.4.1)', icon: Sparkles },
         ].map((sec) => {
           const Icon = sec.icon;
           const isSelected = activeSection === sec.id;
@@ -94,14 +94,14 @@ export default function InfoTab({
               <div>
                 <h3 className="text-base font-bold text-white">Controller Control Center PS4 (ID: TONI88888)</h3>
                 <span className="text-xs text-sky-300 font-semibold font-mono">
-                  Versión: v1.4.0 / SFO 01.40 • Payload: ANYCONTROLLER
+                  Versión: v1.4.1 / SFO 01.41 • Payload: ANYCONTROLLER
                 </span>
               </div>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              <strong>Controller Control Center PS4 v1.4.0</strong> (motor demonio <strong>ANYCONTROLLER</strong>) es una aplicación compañera a 1080p 100% independiente para consolas PlayStation 4 con <strong>GoldHEN</strong>.
-              Incluye <strong>aislamiento estricto de perfiles por ranura para DualSense PS5 (1 a 4 mandos sin interferencias en el Jugador 1)</strong>, persistencia continua de colores/efectos RGB y brillo tras salir al menú o juegos, y paneles explicativos en tiempo real para cada opción.
+              <strong>Controller Control Center PS4 v1.4.1</strong> (motor demonio <strong>ANYCONTROLLER</strong>) es una aplicación compañera a 1080p 100% independiente para consolas PlayStation 4 con <strong>GoldHEN</strong>.
+              Incluye <strong>Laboratorio 3D interactivo para PS5 DualSense y PS4 DualShock 4</strong>, aislamiento estricto de perfiles por ranura para DualSense (1 a 4 mandos sin interferencias en el Jugador 1), persistencia continua de colores/efectos RGB y brillo tras salir al menú o juegos, y paneles explicativos en tiempo real para cada opción.
             </p>
 
             <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-2 text-xs">
@@ -185,34 +185,34 @@ export default function InfoTab({
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
-                  Incluye el <strong>Controller_Control_Center_PS4_v1.4.0.pkg</strong>, el <strong>payload ANYCONTROLLER (anycontroller.bin)</strong> y la <strong>configuración anycontroller.ini</strong> en un solo archivo.
+                  Incluye el <strong>Controller_Control_Center_PS4_v1.4.1.pkg</strong>, el <strong>payload ANYCONTROLLER (anycontroller.bin)</strong> y la <strong>configuración anycontroller.ini</strong> en un solo archivo.
                 </p>
               </div>
               <button
                 onClick={async () => {
-                  onShowToast('Descargando Pack Todo-en-Uno v1.4.0 (PKG + bin + ini)...');
-                  await downloadBinaryFile('/Controller_Control_Center_PS4_Pack_v1.4.0.zip', 'Controller_Control_Center_PS4_Pack_v1.4.0.zip');
-                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.4.0.zip descargado con éxito!');
+                  onShowToast('Descargando Pack Todo-en-Uno v1.4.1 (PKG + bin + ini)...');
+                  await downloadBinaryFile('/Controller_Control_Center_PS4_Pack_v1.4.1.zip', 'Controller_Control_Center_PS4_Pack_v1.4.1.zip');
+                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.4.1.zip descargado con éxito!');
                 }}
                 className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-[0_0_15px_rgba(52,211,153,0.4)] transition-all text-center cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Descargar Pack v1.4.0 (.ZIP)</span>
+                <span>Descargar Pack v1.4.1 (.ZIP)</span>
               </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
               <button
                 onClick={async () => {
-                  onShowToast('Iniciando descarga directa de Controller_Control_Center_PS4_v1.4.0.pkg...');
-                  await downloadBinaryFile('/Controller_Control_Center_PS4_v1.4.0.pkg', 'Controller_Control_Center_PS4_v1.4.0.pkg');
-                  onShowToast('¡Controller_Control_Center_PS4_v1.4.0.pkg descargado con éxito!');
+                  onShowToast('Iniciando descarga directa de Controller_Control_Center_PS4_v1.4.1.pkg...');
+                  await downloadBinaryFile('/Controller_Control_Center_PS4_v1.4.1.pkg', 'Controller_Control_Center_PS4_v1.4.1.pkg');
+                  onShowToast('¡Controller_Control_Center_PS4_v1.4.1.pkg descargado con éxito!');
                 }}
                 className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-[0_0_15px_rgba(52,211,153,0.3)] transition-all cursor-pointer"
               >
                 <div className="flex flex-col text-left">
-                  <span>Descargar .PKG v1.4.0</span>
-                  <span className="text-[10px] text-slate-900 font-normal">Controller_Control_Center_PS4_v1.4.0.pkg</span>
+                  <span>Descargar .PKG v1.4.1</span>
+                  <span className="text-[10px] text-slate-900 font-normal">Controller_Control_Center_PS4_v1.4.1.pkg</span>
                 </div>
                 <Download className="w-4 h-4 shrink-0" />
               </button>
@@ -248,15 +248,15 @@ export default function InfoTab({
 
               <button
                 onClick={async () => {
-                  onShowToast('Descargando código fuente v1.4.0 en español...');
-                  await downloadBinaryFile('/Controller_Control_Center_PS4_Source_v1.4.0.zip', 'Controller_Control_Center_PS4_Source_v1.4.0.zip');
+                  onShowToast('Descargando código fuente v1.4.1 en español...');
+                  await downloadBinaryFile('/Controller_Control_Center_PS4_Source_v1.4.1.zip', 'Controller_Control_Center_PS4_Source_v1.4.1.zip');
                   onShowToast('¡Código fuente descargado!');
                 }}
                 className="flex items-center justify-between p-3.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 font-bold text-xs border border-purple-500/40 transition-all cursor-pointer"
               >
                 <div className="flex flex-col text-left">
                   <span>Código Fuente C++ (.ZIP)</span>
-                  <span className="text-[10px] text-purple-300 font-normal">Fuentes v1.4.0 + build_app.sh</span>
+                  <span className="text-[10px] text-purple-300 font-normal">Fuentes v1.4.1 + build_app.sh</span>
                 </div>
                 <Download className="w-4 h-4 text-purple-400 shrink-0" />
               </button>
@@ -283,7 +283,7 @@ export default function InfoTab({
                     <Terminal className="w-3.5 h-3.5" /> Método 2 (Actualizaciones Directas por GitHub)
                   </span>
                   <p className="text-slate-400 leading-relaxed">
-                    Al subir <code className="text-sky-300 font-mono">Controller_Control_Center_PS4_v1.4.0.pkg</code> a las Releases de tu repositorio <code className="text-sky-300 font-mono">toniigibertt/AnyController-PS4</code>, la aplicación en PS4 detecta nuevas versiones y las descarga directamente con su número de versión a <code className="text-sky-300 font-mono">/data/pkg/</code>.
+                    Al subir <code className="text-sky-300 font-mono">Controller_Control_Center_PS4_v1.4.1.pkg</code> a las Releases de tu repositorio <code className="text-sky-300 font-mono">toniigibertt/AnyController-PS4</code>, la aplicación en PS4 detecta nuevas versiones y las descarga directamente con su número de versión a <code className="text-sky-300 font-mono">/data/pkg/</code>.
                   </p>
                 </div>
               </div>
@@ -390,11 +390,20 @@ export default function InfoTab({
         <div className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-sky-400" />
-            Novedades de Controller Control Center PS4 v1.4.0 (Payload: ANYCONTROLLER • ID: TONI88888)
+            Novedades de Controller Control Center PS4 v1.4.1 (Payload: ANYCONTROLLER • ID: TONI88888)
           </h3>
 
           <div className="space-y-3 text-xs text-slate-300 divide-y divide-white/5">
             <div className="pt-2">
+              <h4 className="font-bold text-sky-300">
+                ★ Nuevo Laboratorio 3D Interactivo (DualSense PS5 y DualShock 4 PS4) — v1.4.1
+              </h4>
+              <p className="text-slate-400 mt-0.5">
+                Sustituida la tabla estática de botones por un <strong>mando en 3D animado en tiempo real</strong> tanto en la app PS4 como en la web compañera. Cambia automáticamente entre DualSense PS5 y DualShock 4, inclina los sticks L3/R3, gira/pulsa los gatillos L2/R2, sincroniza la barra LED RGB y dispara ondas luminosas al pulsar cada botón o vibrar los motores.
+              </p>
+            </div>
+
+            <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
                 1. Aislamiento Total del 2.º DualSense (Jugador 1 y Botón PS Intactos)
               </h4>
@@ -408,7 +417,7 @@ export default function InfoTab({
                 2. Persistencia Real de Colores LED, Brillo y Ajustes Tras Cerrar el PKG
               </h4>
               <p className="text-slate-400 mt-0.5">
-                El demonio ahora conserva sus manejadores <code className="text-sky-300 font-mono">scePad</code> por usuario en segundo plano y refresca continuamente el color LED, brillo, gatillos, vibración y efectos Arcoíris/Respiración al salir al menú de PS4 o entrar a juegos, evitando que el sistema los restablezca al azul por defecto. Además avisa si falta reiniciar 1 vez para cargar el nuevo demonio en RAM.
+                El demonio ahora conserva sus manejadores <code className="text-sky-300 font-mono">scePad</code> por usuario en segundo plano y refresca continuamente el color LED, brillo, gatillos, vibración y efectos Arcoíris/Respiración al salir al menú de PS4 o entrar a juegos, evitando que el sistema los restablezca al azul por defecto.
               </p>
             </div>
 
@@ -417,7 +426,7 @@ export default function InfoTab({
                 3. Guía Explicativa en Vivo en cada Opción y Flechas de Scroll en DualShock 4
               </h4>
               <p className="text-slate-400 mt-0.5">
-                Añadido un panel descriptivo inferior en <strong>Ajustes Globales</strong>, <strong>DualSense PS5</strong> y <strong>DualShock 4</strong> que explica qué modifica exactamente la opción seleccionada y el efecto del valor activo, además de indicadores de desplazamiento <code className="text-sky-300 font-mono">^ / v</code> en la pestaña DualShock 4.
+                Panel descriptivo inferior en <strong>Ajustes Globales</strong>, <strong>DualSense PS5</strong> y <strong>DualShock 4</strong> que explica qué modifica exactamente la opción seleccionada y el efecto del valor activo, además de indicadores de desplazamiento <code className="text-sky-300 font-mono">^ / v</code> en la pestaña DualShock 4.
               </p>
             </div>
           </div>

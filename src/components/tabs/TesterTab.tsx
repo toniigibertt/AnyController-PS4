@@ -5,8 +5,8 @@
 import { useState, useEffect } from 'react';
 import { AppConfig, LiveGamepadInput, TesterState } from '../../types';
 import { DEADZONE_OPTIONS, DEADZONE_VALUES } from '../../constants/options';
+import Controller3DViewer, { Controller3DModel } from '../Controller3DViewer';
 import {
-  Gamepad2,
   Activity,
   Vibrate,
   Crosshair,
@@ -35,6 +35,8 @@ interface TesterTabProps {
   activeSlot: number;
   onSelectSlot: (slot: number) => void;
   onTriggerRumble: (phase: number) => void;
+  activeControllerMode?: Controller3DModel;
+  onSelectControllerMode?: (mode: Controller3DModel) => void;
 }
 
 export default function TesterTab({
@@ -44,7 +46,15 @@ export default function TesterTab({
   activeSlot,
   onSelectSlot,
   onTriggerRumble,
+  activeControllerMode = 'dualsense',
+  onSelectControllerMode,
 }: TesterTabProps) {
+  const [viewerMode, setViewerMode] = useState<Controller3DModel>(activeControllerMode);
+
+  useEffect(() => {
+    setViewerMode(activeControllerMode);
+  }, [activeControllerMode]);
+
   const [tester, setTester] = useState<TesterState>({
     rumbleFrames: 0,
     rumblePhase: 0,
@@ -489,7 +499,20 @@ export default function TesterTab({
         )}
       </div>
 
-      {/* Main Grid: Visual Gamepad & Real-time Sensors */}
+      {/* Interactive 3D Controller Showcase (Auto-switches PS5 DualSense / PS4 DualShock 4) */}
+      <Controller3DViewer
+        mode={viewerMode}
+        onModeChange={(next) => {
+          setViewerMode(next);
+          onSelectControllerMode?.(next);
+        }}
+        liveInput={liveInput}
+        config={config}
+        rumblePhase={tester.rumblePhase}
+        batteryLevel={activeLevel}
+      />
+
+      {/* Main Grid: Visual Gamepad Telemetry & Drift Calibration */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Visual Sticks & Triggers (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
@@ -625,53 +648,9 @@ export default function TesterTab({
               </div>
             </div>
           </div>
-
-          {/* Rumble Motor Test */}
-          <div className="p-5 rounded-2xl bg-black/40 border border-white/10">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Vibrate className="w-4 h-4 text-sky-400" />
-              Prueba de Motores de Vibración (Rumble Háptico)
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Envía pulsos de prueba a los actuadores físicos conectados a través de la Web Gamepad API.
-            </p>
-
-            <div className="grid grid-cols-3 gap-3 mt-4">
-              <button
-                onClick={() => handleTestRumble(1)}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                  tester.rumblePhase === 1
-                    ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-[0_0_15px_#38bdf8]'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
-                }`}
-              >
-                Motor Pesado (L)
-              </button>
-              <button
-                onClick={() => handleTestRumble(2)}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                  tester.rumblePhase === 2
-                    ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-[0_0_15px_#38bdf8]'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
-                }`}
-              >
-                Motor Ligero (R)
-              </button>
-              <button
-                onClick={() => handleTestRumble(3)}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                  tester.rumblePhase === 3
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_15px_#34d399]'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
-                }`}
-              >
-                Ambos Motores (100%)
-              </button>
-            </div>
-          </div>
         </div>
 
-        {/* Right Column: Drift Calibration Wizard & Real-time Buttons (5 cols) */}
+        {/* Right Column: Drift Calibration Wizard & Haptic Rumble Test (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           {/* Automated Stick Drift Calibration Wizard */}
           <div className="p-5 rounded-2xl bg-gradient-to-br from-[#061e3d] via-[#021024] to-black border border-sky-500/30 shadow-[0_0_30px_rgba(0,112,209,0.2)]">
@@ -761,134 +740,47 @@ export default function TesterTab({
             </div>
           </div>
 
-          {/* Real-time Pressed Buttons Matrix */}
+          {/* Rumble Motor Test */}
           <div className="p-5 rounded-2xl bg-black/40 border border-white/10">
-            <h3 className="text-sm font-bold text-white flex items-center justify-between mb-4">
-              <span className="flex items-center gap-2">
-                <Gamepad2 className="w-4 h-4 text-sky-400" />
-                Detección de Botones en Vivo
-              </span>
-              <span className="text-[10px] text-slate-400">Teclado o Mando</span>
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Vibrate className="w-4 h-4 text-sky-400" />
+              Prueba de Motores de Vibración (Rumble Háptico)
             </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Envía pulsos de prueba a los actuadores físicos y observa vibrar el mando en 3D.
+            </p>
 
-            {/* D-Pad & Action Buttons Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* D-Pad Buttons */}
-              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Cruceta (D-Pad)
-                </span>
-                <div className="grid grid-cols-3 gap-1.5 w-28 mx-auto">
-                  <div />
-                  <div
-                    className={`h-7 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${
-                      b['dpad_up']
-                        ? 'bg-sky-400 text-slate-950 border-sky-300 shadow-[0_0_10px_#38bdf8]'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    ▲
-                  </div>
-                  <div />
-                  <div
-                    className={`h-7 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${
-                      b['dpad_left']
-                        ? 'bg-sky-400 text-slate-950 border-sky-300 shadow-[0_0_10px_#38bdf8]'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    ◀
-                  </div>
-                  <div
-                    className={`h-7 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${
-                      b['dpad_down']
-                        ? 'bg-sky-400 text-slate-950 border-sky-300 shadow-[0_0_10px_#38bdf8]'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    ▼
-                  </div>
-                  <div
-                    className={`h-7 rounded flex items-center justify-center text-[10px] font-bold border transition-colors ${
-                      b['dpad_right']
-                        ? 'bg-sky-400 text-slate-950 border-sky-300 shadow-[0_0_10px_#38bdf8]'
-                        : 'bg-white/5 text-slate-400 border-white/10'
-                    }`}
-                  >
-                    ▶
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Face Buttons (Cross, Circle, Square, Triangle) */}
-              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Acción Frontal
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <div
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-colors ${
-                      b['cross']
-                        ? 'bg-blue-500 text-white border-blue-400 shadow-[0_0_10px_#3b82f6]'
-                        : 'bg-white/5 text-slate-300 border-white/10'
-                    }`}
-                  >
-                    <span>✕</span> <span className="text-[10px]">Cruz</span>
-                  </div>
-                  <div
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-colors ${
-                      b['circle']
-                        ? 'bg-red-500 text-white border-red-400 shadow-[0_0_10px_#ef4444]'
-                        : 'bg-white/5 text-slate-300 border-white/10'
-                    }`}
-                  >
-                    <span>○</span> <span className="text-[10px]">Círculo</span>
-                  </div>
-                  <div
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-colors ${
-                      b['square']
-                        ? 'bg-pink-500 text-white border-pink-400 shadow-[0_0_10px_#ec4899]'
-                        : 'bg-white/5 text-slate-300 border-white/10'
-                    }`}
-                  >
-                    <span>□</span> <span className="text-[10px]">Cuadrado</span>
-                  </div>
-                  <div
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-colors ${
-                      b['triangle']
-                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_10px_#10b981]'
-                        : 'bg-white/5 text-slate-300 border-white/10'
-                    }`}
-                  >
-                    <span>△</span> <span className="text-[10px]">Triángulo</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* System & Shoulder Buttons Badges */}
-            <div className="grid grid-cols-4 gap-2 mt-3">
-              {[
-                { name: 'L1', active: b['l1'] },
-                { name: 'R1', active: b['r1'] },
-                { name: 'Share', active: b['share'] },
-                { name: 'Options', active: b['options'] },
-                { name: 'Botón PS', active: b['ps'] },
-                { name: 'Touchpad', active: b['touchpad'] },
-                { name: 'L3 Click', active: b['l3'] },
-                { name: 'R3 Click', active: b['r3'] },
-              ].map((btn, idx) => (
-                <div
-                  key={idx}
-                  className={`py-1.5 px-1 rounded-lg text-[10px] font-bold text-center border transition-colors ${
-                    btn.active
-                      ? 'bg-sky-400 text-slate-950 border-sky-300 shadow-[0_0_8px_#38bdf8]'
-                      : 'bg-white/5 text-slate-400 border-white/10'
-                  }`}
-                >
-                  {btn.name}
-                </div>
-              ))}
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <button
+                onClick={() => handleTestRumble(1)}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  tester.rumblePhase === 1
+                    ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-[0_0_15px_#38bdf8]'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
+                }`}
+              >
+                Motor Pesado (L)
+              </button>
+              <button
+                onClick={() => handleTestRumble(2)}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  tester.rumblePhase === 2
+                    ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-[0_0_15px_#38bdf8]'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
+                }`}
+              >
+                Motor Ligero (R)
+              </button>
+              <button
+                onClick={() => handleTestRumble(3)}
+                className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  tester.rumblePhase === 3
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-[0_0_15px_#34d399]'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border-white/10'
+                }`}
+              >
+                Ambos (100%)
+              </button>
             </div>
           </div>
         </div>

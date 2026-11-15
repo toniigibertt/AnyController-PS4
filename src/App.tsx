@@ -221,6 +221,8 @@ export default function App() {
               activeSlot={activeSlot}
               onSelectSlot={setActiveSlot}
               onTriggerRumble={triggerRumble}
+              activeControllerMode={activeControllerMode}
+              onSelectControllerMode={handleToggleControllerMode}
             />
           )}
 

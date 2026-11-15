@@ -6,6 +6,7 @@
 #include "hid_profile.h"
 #include "pkg_updater.h"
 #include "ps_background.h"
+#include "controller_3d.h"
 #include <orbis/Pad.h>
 #include <string>
 
@@ -79,6 +80,7 @@ private:
     int bg_width;
     int bg_height;
     PSBackground psBg;
+    Controller3DRenderer controller3D;
 
     ImageRGBA xboxLogo;
     ImageRGBA iconGear;
@@ -119,7 +121,7 @@ private:
     void draw_text_centered(Scene2D* scene, const std::string& text, FT_Face face, int centerX, int baselineY, Color color);
     void draw_option_guide_box(Scene2D* scene, const char* optionTitle, const char* whatItDoes, const char* currentValEffect, Color accentColor);
 
-    void render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester);
+    void render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester, bool dualsenseConnected);
     void render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard, const HidStatus& status);
     void render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCard, const OrbisPadData& padData, const TesterState& tester);
     void render_remap(Scene2D* scene, const HidStatus& status, const HidProfile& profile,

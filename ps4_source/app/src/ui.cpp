@@ -625,8 +625,9 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
         draw_text(scene, "Salir", fontFooter, 1770, 922, COLOR_TEXT_DIM);
 
     } else if (currentTabId == TAB_TESTER) {
-        // --- INPUT TESTER & CALIBRATION VIEW ---
-        render_tester(scene, cfg, padData, tester);
+        // --- INPUT TESTER & 3D CONTROLLER LAB VIEW ---
+        controller3D.update(0.01666f, padData.buttons, tester.rumblePhase);
+        render_tester(scene, cfg, padData, tester, dualsenseConnected);
 
     } else if (currentTabId == TAB_DUALSENSE && hidStatus) {
         // --- DUALSENSE PS5 EXCLUSIVE MANAGEMENT VIEW ---
@@ -873,7 +874,7 @@ void UI::render_wizard(Scene2D* scene, const InstallResult& res, int frameID) {
     draw_text(scene, "Abrir Control Center", fontFooter, 1545, 922, COLOR_BLUE_BRIGHT);
 }
 
-void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester) {
+void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester, bool dualsenseConnected) {
     if (!scene) return;
 
     char buf[128];
@@ -883,32 +884,26 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     // ========================================================
     // HEADER AREA: INFO CARD & TEST MODE R3 BADGE
     // ========================================================
-    // Card 1: Tester Info (X = CARD_X, Y = 135, W = 1060, H = 76)
     draw_rounded_rect(scene, CARD_X, 135, 1060, 76, 10, COLOR_CARD_BG);
     draw_rounded_outline(scene, CARD_X, 135, 1060, 76, 10, COLOR_CARD_BORDER, 1);
     draw_image(scene, iconMode, CARD_X + 20, 135 + (76 - iconMode.height) / 2);
 
-    draw_text(scene, "Probador de Entradas en Hardware Real", fontCardTitle, CARD_X + 75, 164, COLOR_WHITE);
-    draw_text(scene, "Telemetría de palancas en tiempo real, rangos de gatillos y estado de botones", fontCardDesc, CARD_X + 75, 194, COLOR_TEXT_DIM);
+    draw_text(scene, "Laboratorio 3D de Entradas en Hardware Real", fontCardTitle, CARD_X + 75, 164, COLOR_WHITE);
+    draw_text(scene, "Visor 3D animado DualSense / DualShock 4, telemetría de palancas y vibración", fontCardDesc, CARD_X + 75, 194, COLOR_TEXT_DIM);
 
-    // Card 2: Test Mode R3 Badge Card (X = CARD_X + 1080 = 1460, Y = 135, W = 360, H = 76)
     int testCardX = CARD_X + 1080;
     int testCardW = 360;
     int testCardH = 76;
 
     if (tester.testMode) {
-        Color badgeBg = Color{ 15, 60, 40 };
-        Color badgeBorder = Color{ 0, 255, 150 };
-        draw_rounded_rect(scene, testCardX, 135, testCardW, testCardH, 10, badgeBg);
-        draw_rounded_outline(scene, testCardX, 135, testCardW, testCardH, 10, badgeBorder, 2);
+        draw_rounded_rect(scene, testCardX, 135, testCardW, testCardH, 10, Color{ 15, 60, 40 });
+        draw_rounded_outline(scene, testCardX, 135, testCardW, testCardH, 10, Color{ 0, 255, 150 }, 2);
         draw_image(scene, btnR3, testCardX + 16, 135 + (testCardH - btnR3.height) / 2);
         draw_text(scene, "MODO PRUEBA: ACTIVO", fontCardTitle, testCardX + 60, 164, Color{ 0, 255, 150 });
         draw_text(scene, "Pulsa R3 para volver", fontCardDesc, testCardX + 60, 194, COLOR_WHITE);
     } else {
-        Color badgeBg = Color{ 14, 24, 38 };
-        Color badgeBorder = COLOR_CARD_BORDER;
-        draw_rounded_rect(scene, testCardX, 135, testCardW, testCardH, 10, badgeBg);
-        draw_rounded_outline(scene, testCardX, 135, testCardW, testCardH, 10, badgeBorder, 1);
+        draw_rounded_rect(scene, testCardX, 135, testCardW, testCardH, 10, Color{ 14, 24, 38 });
+        draw_rounded_outline(scene, testCardX, 135, testCardW, testCardH, 10, COLOR_CARD_BORDER, 1);
         draw_image(scene, btnR3, testCardX + 16, 135 + (testCardH - btnR3.height) / 2);
         draw_text(scene, "MODO PRUEBA: APAGADO", fontCardTitle, testCardX + 60, 164, COLOR_WHITE);
         draw_text(scene, "Pulsa R3 para aislar entradas", fontCardDesc, testCardX + 60, 194, COLOR_BLUE_BRIGHT);
@@ -937,7 +932,6 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
         draw_rounded_rect(scene, px, py, pillW, ph, 8, bg);
         draw_rounded_outline(scene, px, py, pillW, ph, 8, border, isSel ? 2 : 1);
 
-        // Status LED dot
         Color dotColor = isConn ? Color{ 0, 255, 150 } : Color{ 80, 95, 110 };
         draw_circle(scene, px + 16, py + 19, 5, dotColor);
 
@@ -958,14 +952,11 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     if (!padData.connected) {
         int warnX = CARD_X;
         int warnY = 280;
-        int warnW = CARD_W;
+        int warnW = 1440;
         int warnH = 560;
 
-        Color warnBg = { 20, 26, 42 };
-        Color warnBorder = { 0, 112, 220 };
-
-        draw_rounded_rect(scene, warnX, warnY, warnW, warnH, 12, warnBg);
-        draw_rounded_outline(scene, warnX, warnY, warnW, warnH, 12, warnBorder, 2);
+        draw_rounded_rect(scene, warnX, warnY, warnW, warnH, 12, Color{ 20, 26, 42 });
+        draw_rounded_outline(scene, warnX, warnY, warnW, warnH, 12, Color{ 0, 112, 220 }, 2);
 
         draw_image(scene, iconInfo, warnX + 40, warnY + 42);
         char noPadTitle[64];
@@ -973,7 +964,7 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
         draw_text(scene, noPadTitle, fontCardTitle, warnX + 105, warnY + 68, COLOR_WHITE);
 
         int textY = warnY + 130;
-        draw_text(scene, "El Probador opera en modo hardware puro para aislar entradas por ranura de jugador.",
+        draw_text(scene, "El Laboratorio opera en modo hardware puro para aislar entradas por ranura de jugador.",
                   fontCardDesc, warnX + 40, textY, COLOR_TEXT_DIM);
         textY += 40;
         snprintf(buf, sizeof(buf), "No hay ningún mando activo actualmente en la Ranura %d (Jugador %d).", tester.selectedSlot + 1, tester.selectedSlot + 1);
@@ -985,10 +976,9 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
         draw_text(scene, "o conecta un mando DualSense (Bluetooth) o USB para asignarlo a esta ranura.",
                   fontCardDesc, warnX + 40, textY, COLOR_TEXT_DIM);
 
-        // Footer for disconnected state
         scene->DrawRectangle(60, 865, 1800, 2, COLOR_DIVIDER);
         draw_image(scene, iconMode, 60, 890);
-        snprintf(buf, sizeof(buf), "Probador de Entradas - Ranura %d (Jugador %d)", tester.selectedSlot + 1, tester.selectedSlot + 1);
+        snprintf(buf, sizeof(buf), "Laboratorio 3D - Ranura %d (Jugador %d)", tester.selectedSlot + 1, tester.selectedSlot + 1);
         draw_text(scene, buf, fontCardTitle, 120, 912, COLOR_WHITE);
         draw_text(scene, "Esperando conexión de mando en esta ranura...", fontFooter, 120, 938, Color{ 220, 80, 60 });
 
@@ -1001,37 +991,29 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     }
 
     // ========================================================
-    // 1. ANALOG STICKS (ROW 1, Y: 280, H: 235)
+    // LEFT TELEMETRY COLUMN (X = 410..1100, W = 690)
     // ========================================================
-    int stickR = 56;
+    int stickR = 46;
+    int colCardW = 336;
+    int lsX = CARD_X;      // 410
+    int rsX = CARD_X + 354; // 764
+    int lsY = 280;
+    int lsH = 205;
 
     // --- Left Stick Card ---
-    int lsX = CARD_X;
-    int lsW = 555;
-    int lsY = 280;
-    int lsH = 235;
+    draw_rounded_rect(scene, lsX, lsY, colCardW, lsH, 12, COLOR_CARD_BG);
+    draw_rounded_outline(scene, lsX, lsY, colCardW, lsH, 12, COLOR_CARD_BORDER, 1);
+    draw_text(scene, "Palanca L3", fontCardTitle, lsX + 18, lsY + 34, COLOR_WHITE);
 
-    draw_rounded_rect(scene, lsX, lsY, lsW, lsH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, lsX, lsY, lsW, lsH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconDeadzone, lsX + 20, lsY + 16);
-    draw_text(scene, "Palanca Izquierda (L3)", fontCardTitle, lsX + 70, lsY + 38, COLOR_WHITE);
-
-    // Left Reticle
-    int lcx = lsX + 105;
-    int lcy = lsY + 140;
-
-    // Crosshair & circle
+    int lcx = lsX + 70;
+    int lcy = lsY + 124;
     draw_circle_outline(scene, lcx, lcy, stickR, COLOR_CARD_BORDER, 2);
     scene->DrawRectangle(lcx - stickR, lcy, 2 * stickR, 1, COLOR_DIVIDER);
     scene->DrawRectangle(lcx, lcy - stickR, 1, 2 * stickR, COLOR_DIVIDER);
 
-    // Deadzone circle
     int ldz_r = (deadzone_val * stickR) / 128;
-    if (ldz_r > 0) {
-        draw_circle_outline(scene, lcx, lcy, ldz_r, COLOR_BLUE_GLOW, 1);
-    }
+    if (ldz_r > 0) draw_circle_outline(scene, lcx, lcy, ldz_r, COLOR_BLUE_GLOW, 1);
 
-    // Left Stick coordinates
     int rawLX = (int)padData.leftStick.x;
     int rawLY = (int)padData.leftStick.y;
     int lDevX = rawLX - 128;
@@ -1040,55 +1022,35 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     int lsYPos = lcy + (lDevY * stickR) / 128;
     int lDist = (int)sqrt((double)(lDevX * lDevX + lDevY * lDevY));
     bool lInDeadzone = (lDist <= deadzone_val);
-    Color lCursorColor = lInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN;
-
-    draw_circle(scene, lsXPos, lsYPos, 7, lCursorColor);
-    draw_circle_outline(scene, lsXPos, lsYPos, 7, COLOR_WHITE, 1);
-
-    // Left Stick Info Text
-    int textX = lsX + 195;
-    snprintf(buf, sizeof(buf), "X: %d  (%+d%%)", rawLX, (lDevX * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, textX, lsY + 85, COLOR_WHITE);
-
-    snprintf(buf, sizeof(buf), "Y: %d  (%+d%%)", rawLY, (lDevY * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, textX, lsY + 115, COLOR_WHITE);
-
-    snprintf(buf, sizeof(buf), "Zona Muerta: %s (val: %d)",
-             ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str(), deadzone_val);
-    draw_text(scene, buf, fontCardDesc, textX, lsY + 145, COLOR_TEXT_DIM);
-
     bool l3Pressed = (padData.buttons & ORBIS_PAD_BUTTON_L3) != 0;
-    snprintf(buf, sizeof(buf), "Clic L3: %s", l3Pressed ? "PULSADO" : "Reposo");
-    draw_text(scene, buf, fontCardDesc, textX, lsY + 175, l3Pressed ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
 
-    draw_text(scene, lInDeadzone ? "Salida: REPOSO (En Zona Muerta)" : "Salida: ENTRADA ACTIVA",
-              fontCardDesc, textX, lsY + 205, lInDeadzone ? COLOR_TEXT_DIM : COLOR_BLUE_BRIGHT);
+    draw_circle(scene, lsXPos, lsYPos, 6, l3Pressed ? Color{ 255, 190, 45 } : (lInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN));
+    draw_circle_outline(scene, lsXPos, lsYPos, 6, COLOR_WHITE, 1);
+
+    int lTextX = lsX + 134;
+    snprintf(buf, sizeof(buf), "X:%d (%+d%%)", rawLX, (lDevX * 100) / 128);
+    draw_text(scene, buf, fontCardDesc, lTextX, lsY + 80, COLOR_WHITE);
+    snprintf(buf, sizeof(buf), "Y:%d (%+d%%)", rawLY, (lDevY * 100) / 128);
+    draw_text(scene, buf, fontCardDesc, lTextX, lsY + 108, COLOR_WHITE);
+    snprintf(buf, sizeof(buf), "ZM: %s", ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str());
+    draw_text(scene, buf, fontCardDesc, lTextX, lsY + 136, COLOR_TEXT_DIM);
+    draw_text(scene, l3Pressed ? "L3: PULSADO" : (lInDeadzone ? "Estado: Reposo" : "Estado: Activo"),
+              fontCardDesc, lTextX, lsY + 166, (l3Pressed || !lInDeadzone) ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
 
     // --- Right Stick Card ---
-    int rsX = lsX + lsW + 30; // 410 + 555 + 30 = 995
-    int rsW = 555;
-    int rsY = 280;
-    int rsH = 235;
+    draw_rounded_rect(scene, rsX, lsY, colCardW, lsH, 12, COLOR_CARD_BG);
+    draw_rounded_outline(scene, rsX, lsY, colCardW, lsH, 12, COLOR_CARD_BORDER, 1);
+    draw_text(scene, "Palanca R3", fontCardTitle, rsX + 18, lsY + 34, COLOR_WHITE);
 
-    draw_rounded_rect(scene, rsX, rsY, rsW, rsH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, rsX, rsY, rsW, rsH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconDeadzone, rsX + 20, rsY + 16);
-    draw_text(scene, "Palanca Derecha (R3)", fontCardTitle, rsX + 70, rsY + 38, COLOR_WHITE);
-
-    // Right Reticle
-    int rcx = rsX + 105;
-    int rcy = rsY + 140;
-
+    int rcx = rsX + 70;
+    int rcy = lsY + 124;
     draw_circle_outline(scene, rcx, rcy, stickR, COLOR_CARD_BORDER, 2);
     scene->DrawRectangle(rcx - stickR, rcy, 2 * stickR, 1, COLOR_DIVIDER);
     scene->DrawRectangle(rcx, rcy - stickR, 1, 2 * stickR, COLOR_DIVIDER);
 
     int rdz_r = (deadzone_val * stickR) / 128;
-    if (rdz_r > 0) {
-        draw_circle_outline(scene, rcx, rcy, rdz_r, COLOR_BLUE_GLOW, 1);
-    }
+    if (rdz_r > 0) draw_circle_outline(scene, rcx, rcy, rdz_r, COLOR_BLUE_GLOW, 1);
 
-    // Right Stick coordinates
     int rawRX = (int)padData.rightStick.x;
     int rawRY = (int)padData.rightStick.y;
     int rDevX = rawRX - 128;
@@ -1097,247 +1059,175 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     int rsYPos = rcy + (rDevY * stickR) / 128;
     int rDist = (int)sqrt((double)(rDevX * rDevX + rDevY * rDevY));
     bool rInDeadzone = (rDist <= deadzone_val);
-    Color rCursorColor = rInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN;
-
-    draw_circle(scene, rsXPos, rsYPos, 7, rCursorColor);
-    draw_circle_outline(scene, rsXPos, rsYPos, 7, COLOR_WHITE, 1);
-
-    // Right Stick Info Text
-    int rTextX = rsX + 195;
-    snprintf(buf, sizeof(buf), "X: %d  (%+d%%)", rawRX, (rDevX * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, rTextX, rsY + 85, COLOR_WHITE);
-
-    snprintf(buf, sizeof(buf), "Y: %d  (%+d%%)", rawRY, (rDevY * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, rTextX, rsY + 115, COLOR_WHITE);
-
-    snprintf(buf, sizeof(buf), "Zona Muerta: %s (val: %d)",
-             ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str(), deadzone_val);
-    draw_text(scene, buf, fontCardDesc, rTextX, rsY + 145, COLOR_TEXT_DIM);
-
     bool r3Pressed = (padData.buttons & ORBIS_PAD_BUTTON_R3) != 0;
-    snprintf(buf, sizeof(buf), "Clic R3: %s", r3Pressed ? "PULSADO" : "Reposo");
-    draw_text(scene, buf, fontCardDesc, rTextX, rsY + 175, r3Pressed ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
 
-    draw_text(scene, rInDeadzone ? "Salida: REPOSO (En Zona Muerta)" : "Salida: ENTRADA ACTIVA",
-              fontCardDesc, rTextX, rsY + 205, rInDeadzone ? COLOR_TEXT_DIM : COLOR_BLUE_BRIGHT);
+    draw_circle(scene, rsXPos, rsYPos, 6, r3Pressed ? Color{ 255, 190, 45 } : (rInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN));
+    draw_circle_outline(scene, rsXPos, rsYPos, 6, COLOR_WHITE, 1);
 
-    // ========================================================
-    // 2. TRIGGERS & BUMPERS (ROW 2, Y: 530, H: 155) - NO OVERLAP
-    // ========================================================
+    int rTextX = rsX + 134;
+    snprintf(buf, sizeof(buf), "X:%d (%+d%%)", rawRX, (rDevX * 100) / 128);
+    draw_text(scene, buf, fontCardDesc, rTextX, lsY + 80, COLOR_WHITE);
+    snprintf(buf, sizeof(buf), "Y:%d (%+d%%)", rawRY, (rDevY * 100) / 128);
+    draw_text(scene, buf, fontCardDesc, rTextX, lsY + 108, COLOR_WHITE);
+    snprintf(buf, sizeof(buf), "ZM: %s", ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str());
+    draw_text(scene, buf, fontCardDesc, rTextX, lsY + 136, COLOR_TEXT_DIM);
+    draw_text(scene, r3Pressed ? "R3: PULSADO" : (rInDeadzone ? "Estado: Reposo" : "Estado: Activo"),
+              fontCardDesc, rTextX, lsY + 166, (r3Pressed || !rInDeadzone) ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
+
+    // --- Row 2: Triggers & Bumpers (Y = 497, H = 135, W = 690) ---
     int trigX = CARD_X;
-    int trigY = 530;
-    int trigW = 1140;
-    int trigH = 155;
+    int trigY = 497;
+    int trigW = 690;
+    int trigH = 135;
 
     draw_rounded_rect(scene, trigX, trigY, trigW, trigH, 12, COLOR_CARD_BG);
     draw_rounded_outline(scene, trigX, trigY, trigW, trigH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconSwap, trigX + 24, trigY + 16);
-    draw_text(scene, "Gatillos y Protectores (L2 / R2 / L1 / R1)", fontCardTitle, trigX + 78, trigY + 38, COLOR_WHITE);
+    draw_image(scene, iconSwap, trigX + 18, trigY + 14);
+    draw_text(scene, "Gatillos Analógicos y Protectores", fontCardTitle, trigX + 70, trigY + 36, COLOR_WHITE);
 
-    // Left Trigger & Bumper (LT & LB)
     int rawLT = (int)padData.analogButtons.l2;
     bool l2Btn = (padData.buttons & ORBIS_PAD_BUTTON_L2) != 0;
     bool lbBtn = (padData.buttons & ORBIS_PAD_BUTTON_L1) != 0;
 
-    int ltBarX = trigX + 30;
-    int ltBarY = trigY + 98;
-    int ltBarW = 390;
-    int ltBarH = 20;
-
-    snprintf(buf, sizeof(buf), "L2: %d / 255 (%d%%)%s", rawLT, (rawLT * 100) / 255, l2Btn ? " [CLIC]" : "");
-    draw_text(scene, buf, fontCardDesc, ltBarX, trigY + 84, l2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
-
+    int ltBarX = trigX + 20;
+    int ltBarY = trigY + 90;
+    int ltBarW = 220;
+    int ltBarH = 18;
+    snprintf(buf, sizeof(buf), "L2: %d/255 (%d%%)", rawLT, (rawLT * 100) / 255);
+    draw_text(scene, buf, fontCardDesc, ltBarX, trigY + 76, l2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
     draw_rounded_rect(scene, ltBarX, ltBarY, ltBarW, ltBarH, 4, Color{ 18, 30, 48 });
     int ltFillW = (rawLT * ltBarW) / 255;
-    if (ltFillW > 0) {
-        draw_rounded_rect(scene, ltBarX, ltBarY, ltFillW, ltBarH, 4, l2Btn ? COLOR_BLUE_MAIN : Color{ 15, 60, 120 });
-    }
-    // Threshold marker
-    int ltMarkerX = ltBarX + (thresh_val * ltBarW) / 255;
-    scene->DrawRectangle(ltMarkerX, ltBarY - 3, 2, ltBarH + 6, COLOR_WHITE);
+    if (ltFillW > 0) draw_rounded_rect(scene, ltBarX, ltBarY, ltFillW, ltBarH, 4, l2Btn ? COLOR_BLUE_MAIN : Color{ 15, 70, 140 });
+    scene->DrawRectangle(ltBarX + (thresh_val * ltBarW) / 255, ltBarY - 3, 2, ltBarH + 6, COLOR_WHITE);
+    draw_btn_badge(scene, ltBarX + ltBarW + 14, trigY + 78, 72, 32, "L1", lbBtn);
 
-    // LB Bumper pill (generous spacing beside LT bar)
-    int lbPillX = trigX + 440;
-    int lbPillY = trigY + 84;
-    draw_btn_badge(scene, lbPillX, lbPillY, 95, 34, "L1 / LB", lbBtn);
-
-    // Right Trigger & Bumper (RT & RB)
     int rawRT = (int)padData.analogButtons.r2;
     bool r2Btn = (padData.buttons & ORBIS_PAD_BUTTON_R2) != 0;
     bool rbBtn = (padData.buttons & ORBIS_PAD_BUTTON_R1) != 0;
 
-    int rtBarX = trigX + 590;
-    int rtBarY = trigY + 98;
-    int rtBarW = 390;
-    int rtBarH = 20;
-
-    snprintf(buf, sizeof(buf), "R2: %d / 255 (%d%%)%s", rawRT, (rawRT * 100) / 255, r2Btn ? " [CLIC]" : "");
-    draw_text(scene, buf, fontCardDesc, rtBarX, trigY + 84, r2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
-
+    int rtBarX = trigX + 356;
+    int rtBarY = trigY + 90;
+    int rtBarW = 220;
+    int rtBarH = 18;
+    snprintf(buf, sizeof(buf), "R2: %d/255 (%d%%)", rawRT, (rawRT * 100) / 255);
+    draw_text(scene, buf, fontCardDesc, rtBarX, trigY + 76, r2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
     draw_rounded_rect(scene, rtBarX, rtBarY, rtBarW, rtBarH, 4, Color{ 18, 30, 48 });
     int rtFillW = (rawRT * rtBarW) / 255;
-    if (rtFillW > 0) {
-        draw_rounded_rect(scene, rtBarX, rtBarY, rtFillW, rtBarH, 4, r2Btn ? COLOR_BLUE_MAIN : Color{ 15, 60, 120 });
-    }
-    // Threshold marker
-    int rtMarkerX = rtBarX + (thresh_val * rtBarW) / 255;
-    scene->DrawRectangle(rtMarkerX, rtBarY - 3, 2, rtBarH + 6, COLOR_WHITE);
+    if (rtFillW > 0) draw_rounded_rect(scene, rtBarX, rtBarY, rtFillW, rtBarH, 4, r2Btn ? COLOR_BLUE_MAIN : Color{ 15, 70, 140 });
+    scene->DrawRectangle(rtBarX + (thresh_val * rtBarW) / 255, rtBarY - 3, 2, rtBarH + 6, COLOR_WHITE);
+    draw_btn_badge(scene, rtBarX + rtBarW + 14, trigY + 78, 72, 32, "R1", rbBtn);
 
-    // RB Bumper pill
-    int rbPillX = trigX + 1000;
-    int rbPillY = trigY + 84;
-    draw_btn_badge(scene, rbPillX, rbPillY, 95, 34, "R1 / RB", rbBtn);
+    // --- Row 3: Vibration Test & Drift Calibration (Y = 644, H = 206) ---
+    int vibY = 644;
+    int vibH = 206;
 
-    // ========================================================
-    // 3. VIBRATION TEST & STICK DRIFT CALIBRATION (ROW 3, Y: 700, H: 150)
-    // ========================================================
-    // Left Box: Vibration Feedback Test
-    int vibX = CARD_X;
-    int vibY = 700;
-    int vibW = 555;
-    int vibH = 150;
-
-    draw_rounded_rect(scene, vibX, vibY, vibW, vibH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, vibX, vibY, vibW, vibH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconRumble, vibX + 24, vibY + 16);
-    draw_text(scene, "Prueba de Vibracion y Motores Hapticos", fontCardTitle, vibX + 78, vibY + 38, COLOR_WHITE);
-
-    draw_image(scene, btnSquare, vibX + 30, vibY + 68);
-    draw_text(scene, "Probar Motores Dobles de Vibracion", fontCardDesc, vibX + 76, vibY + 90, COLOR_WHITE);
-
+    // Left: Vibration
+    draw_rounded_rect(scene, lsX, vibY, colCardW, vibH, 12, COLOR_CARD_BG);
+    draw_rounded_outline(scene, lsX, vibY, colCardW, vibH, 12, COLOR_CARD_BORDER, 1);
+    draw_image(scene, iconRumble, lsX + 18, vibY + 14);
+    draw_text(scene, "Motores Vibración", fontCardTitle, lsX + 68, vibY + 36, COLOR_WHITE);
+    draw_image(scene, btnSquare, lsX + 18, vibY + 72);
+    draw_text(scene, "Probar Motores Hápticos", fontCardDesc, lsX + 64, vibY + 94, COLOR_WHITE);
     if (tester.rumblePhase == 0) {
-        draw_text(scene, "Prueba motor izquierdo (fuerte) y derecho (suave)", fontCardDesc, vibX + 30, vibY + 124, COLOR_TEXT_DIM);
+        draw_text(scene, "Pulsa [Cuadrado] para probar", fontCardDesc, lsX + 18, vibY + 140, COLOR_TEXT_DIM);
+        draw_text(scene, "L (pesado) + R (ligero) en 3D", fontCardDesc, lsX + 18, vibY + 168, COLOR_TEXT_DIM);
     } else if (tester.rumblePhase == 1) {
-        draw_text(scene, "[PROBANDO] Motor Izquierdo (Fuerte / Frecuencia Baja)...", fontCardDesc, vibX + 30, vibY + 124, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "[ACTIVO] Motor Pesado (L)", fontCardDesc, lsX + 18, vibY + 148, COLOR_BLUE_BRIGHT);
     } else if (tester.rumblePhase == 2) {
-        draw_text(scene, "[PROBANDO] Motor Derecho (Suave / Frecuencia Alta)...", fontCardDesc, vibX + 30, vibY + 124, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "[ACTIVO] Motor Ligero (R)", fontCardDesc, lsX + 18, vibY + 148, COLOR_BLUE_BRIGHT);
     } else {
-        draw_text(scene, "[PROBANDO] Ambos Motores Activos (Fuerza Maxima)...", fontCardDesc, vibX + 30, vibY + 124, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "[ACTIVO] Ambos al 100%", fontCardDesc, lsX + 18, vibY + 148, Color{ 0, 255, 150 });
     }
 
-    // Right Box: Stick Drift Auto-Calibration
-    int calX = vibX + vibW + 30; // 995
-    int calY = 700;
-    int calW = 555;
-    int calH = 150;
-
-    draw_rounded_rect(scene, calX, calY, calW, calH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, calX, calY, calW, calH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconDeadzone, calX + 24, calY + 16);
-    draw_text(scene, "Calibracion Automatica de Deriva (Drift)", fontCardTitle, calX + 78, calY + 38, COLOR_WHITE);
+    // Right: Drift Auto-Calibration
+    draw_rounded_rect(scene, rsX, vibY, colCardW, vibH, 12, COLOR_CARD_BG);
+    draw_rounded_outline(scene, rsX, vibY, colCardW, vibH, 12, COLOR_CARD_BORDER, 1);
+    draw_image(scene, iconDeadzone, rsX + 18, vibY + 14);
+    draw_text(scene, "Calibrar Deriva", fontCardTitle, rsX + 68, vibY + 36, COLOR_WHITE);
 
     if (tester.calib.active) {
-        int progressW = (tester.calib.currentFrame * 495) / tester.calib.totalFrames;
-        draw_rounded_rect(scene, calX + 30, calY + 68, 495, 16, 4, Color{ 18, 30, 48 });
-        draw_rounded_rect(scene, calX + 30, calY + 68, progressW, 16, 4, COLOR_BLUE_MAIN);
-
-        snprintf(buf, sizeof(buf), "Muestreando reposo: %d%%  (Ruido maximo: %d)",
+        int barW = colCardW - 36;
+        int progressW = (tester.calib.currentFrame * barW) / tester.calib.totalFrames;
+        draw_rounded_rect(scene, rsX + 18, vibY + 80, barW, 16, 4, Color{ 18, 30, 48 });
+        draw_rounded_rect(scene, rsX + 18, vibY + 80, progressW, 16, 4, COLOR_BLUE_MAIN);
+        snprintf(buf, sizeof(buf), "Muestreando: %d%% (Ruido %d)",
                  (tester.calib.currentFrame * 100) / tester.calib.totalFrames, tester.calib.maxNoise);
-        draw_text(scene, buf, fontCardDesc, calX + 30, calY + 124, COLOR_BLUE_BRIGHT);
+        draw_text(scene, buf, fontCardDesc, rsX + 18, vibY + 136, COLOR_BLUE_BRIGHT);
     } else if (tester.calib.completed) {
-        snprintf(buf, sizeof(buf), "Deriva: %d -> Zona Muerta Sugerida: %s",
+        snprintf(buf, sizeof(buf), "Deriva: %d -> Sugerido: %s",
                  tester.calib.maxNoise, ConfigManager::DEADZONE_OPTIONS[tester.calib.suggestedIndex].c_str());
-        draw_text(scene, buf, fontCardDesc, calX + 30, calY + 86, COLOR_WHITE);
-
-        draw_image(scene, btnCross, calX + 30, calY + 102);
-        draw_text(scene, "Aplicar y guardar zona muerta recomendada", fontCardDesc, calX + 76, calY + 124, COLOR_BLUE_BRIGHT);
+        draw_text(scene, buf, fontCardDesc, rsX + 18, vibY + 86, COLOR_WHITE);
+        draw_image(scene, btnCross, rsX + 18, vibY + 124);
+        draw_text(scene, "Aplicar Zona Muerta", fontCardDesc, rsX + 64, vibY + 146, Color{ 0, 255, 150 });
     } else {
-        draw_image(scene, btnTriangle, calX + 30, calY + 68);
-        draw_text(scene, "Analizar Deriva de Palancas en Reposo (3s)", fontCardDesc, calX + 76, calY + 90, COLOR_WHITE);
-        draw_text(scene, "Mide el ruido de los sticks para calcular la zona muerta optima", fontCardDesc, calX + 30, calY + 124, COLOR_TEXT_DIM);
+        draw_image(scene, btnTriangle, rsX + 18, vibY + 72);
+        draw_text(scene, "Analizar Ruido (3s)", fontCardDesc, rsX + 64, vibY + 94, COLOR_WHITE);
+        draw_text(scene, "Suelta las palancas y pulsa", fontCardDesc, rsX + 18, vibY + 140, COLOR_TEXT_DIM);
+        draw_text(scene, "[Triángulo] para calibrar", fontCardDesc, rsX + 18, vibY + 168, COLOR_TEXT_DIM);
     }
 
     // ========================================================
-    // 3B. RIGHT COLUMN: TOUCHPAD, D-PAD (CRUCETA) & ACTION BUTTONS (X: 1565, Y: 280, W: 285, H: 570)
+    // RIGHT HERO COLUMN: INTERACTIVE 3D ANIMATED CONTROLLER (X = 1118..1850, W = 732, H = 570)
     // ========================================================
-    int tpCardX = 1565;
-    int tpCardY = 280;
-    int tpCardW = 285;
-    int tpCardH = 570;
+    int viewCardX = 1118;
+    int viewCardY = 280;
+    int viewCardW = 732;
+    int viewCardH = 570;
 
-    draw_rounded_rect(scene, tpCardX, tpCardY, tpCardW, tpCardH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, tpCardX, tpCardY, tpCardW, tpCardH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, btnTouchpad, tpCardX + 18, tpCardY + 16);
-    draw_text(scene, "Panel Táctil y Cruceta", fontCardTitle, tpCardX + 66, tpCardY + 38, COLOR_WHITE);
+    draw_rounded_rect(scene, viewCardX, viewCardY, viewCardW, viewCardH, 14, Color{ 7, 12, 24 });
+    draw_rounded_outline(scene, viewCardX, viewCardY, viewCardW, viewCardH, 14, Color{ 0, 140, 235 }, 2);
 
-    // Interactive 2D Touchpad Surface (W: 249, H: 112)
-    bool tpClicked = (padData.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD) != 0;
-    int tpBoxX = tpCardX + 18;
-    int tpBoxY = tpCardY + 58;
-    int tpBoxW = 249;
-    int tpBoxH = 112;
+    // Top banner inside 3D Card
+    draw_rounded_rect(scene, viewCardX + 14, viewCardY + 14, viewCardW - 28, 46, 8, Color{ 12, 22, 40 });
+    draw_image(scene, btnPs, viewCardX + 24, viewCardY + 21);
+    draw_text(scene, "MANDO 3D EN TIEMPO REAL", fontCardTitle, viewCardX + 66, viewCardY + 45, COLOR_WHITE);
 
-    Color tpSurfBg = tpClicked ? Color{ 16, 75, 58 } : Color{ 12, 20, 34 };
-    Color tpSurfBorder = tpClicked ? Color{ 0, 255, 160 } : (padData.touch.fingers > 0 ? COLOR_BLUE_BRIGHT : COLOR_BORDER_DIM);
-    draw_rounded_rect(scene, tpBoxX, tpBoxY, tpBoxW, tpBoxH, 8, tpSurfBg);
-    draw_rounded_outline(scene, tpBoxX, tpBoxY, tpBoxW, tpBoxH, 8, tpSurfBorder, (tpClicked || padData.touch.fingers > 0) ? 2 : 1);
+    // Model badge (auto PS5 DualSense / PS4 DualShock 4)
+    const char* modelBadge = dualsenseConnected ? "PS5 DUALSENSE" : "PS4 DUALSHOCK 4";
+    Color badgeBorderCol = dualsenseConnected ? COLOR_BLUE_BRIGHT : Color{ 129, 140, 248 };
+    draw_rounded_rect(scene, viewCardX + viewCardW - 210, viewCardY + 21, 184, 32, 6, Color{ 16, 40, 74 });
+    draw_rounded_outline(scene, viewCardX + viewCardW - 210, viewCardY + 21, 184, 32, 6, badgeBorderCol, 1);
+    draw_text_centered(scene, modelBadge, fontSubtitle, viewCardX + viewCardW - 118, viewCardY + 43, COLOR_WHITE);
 
-    // Subtle touchpad center divider
-    scene->DrawRectangle(tpBoxX + tpBoxW / 2, tpBoxY + 8, 1, tpBoxH - 16, COLOR_DIVIDER);
+    // Render live animated 3D perspective controller inside viewport!
+    controller3D.render(scene, viewCardX + 12, viewCardY + 64, viewCardW - 24, 444,
+                        dualsenseConnected, cfg, padData, tester.rumblePhase);
 
-    if (padData.touch.fingers > 0) {
-        for (int f = 0; f < (int)padData.touch.fingers && f < 2; f++) {
-            int tx = (int)padData.touch.touch[f].x;
-            int ty = (int)padData.touch.touch[f].y;
-            if (tx < 0) tx = 0;
-            if (tx > 1919) tx = 1919;
-            if (ty < 0) ty = 0;
-            if (ty > 941) ty = 941;
-            int dotX = tpBoxX + 8 + (tx * (tpBoxW - 16)) / 1920;
-            int dotY = tpBoxY + 8 + (ty * (tpBoxH - 16)) / 942;
-            Color fCol = (f == 0) ? Color{ 0, 240, 255 } : Color{ 255, 180, 0 };
-            draw_circle(scene, dotX, dotY, 7, fCol);
-            draw_circle_outline(scene, dotX, dotY, 7, COLOR_WHITE, 1);
-        }
-        snprintf(buf, sizeof(buf), "Táctil: (%d, %d)%s",
-                 (int)padData.touch.touch[0].x, (int)padData.touch.touch[0].y,
-                 tpClicked ? " [CLIC]" : "");
-        draw_text_centered(scene, buf, fontCardDesc, tpBoxX + tpBoxW / 2, tpBoxY + tpBoxH + 22,
-                           tpClicked ? Color{ 0, 255, 160 } : COLOR_BLUE_BRIGHT);
-    } else {
-        draw_text_centered(scene, tpClicked ? "¡CLIC TÁCTIL PULSADO!" : "Panel Táctil (Botón Grande)",
-                           fontCardDesc, tpBoxX + tpBoxW / 2, tpBoxY + tpBoxH / 2 + 6,
-                           tpClicked ? Color{ 0, 255, 160 } : COLOR_TEXT_DIM);
-        draw_text_centered(scene, tpClicked ? "Estado: CLIC MECÁNICO ACTIVO" : "Toca o pulsa el panel central",
-                           fontCardDesc, tpBoxX + tpBoxW / 2, tpBoxY + tpBoxH + 22,
-                           tpClicked ? Color{ 0, 255, 160 } : COLOR_TEXT_DIM);
-    }
+    // Bottom Live Pressed Buttons Readout Strip inside 3D Card
+    std::string pressedStr;
+    auto addPressed = [&](const char* name) {
+        if (!pressedStr.empty()) pressedStr += "  •  ";
+        pressedStr += name;
+    };
+    if (padData.buttons & ORBIS_PAD_BUTTON_CROSS)     addPressed("✕ Cruz");
+    if (padData.buttons & ORBIS_PAD_BUTTON_CIRCLE)    addPressed("○ Círculo");
+    if (padData.buttons & ORBIS_PAD_BUTTON_SQUARE)    addPressed("□ Cuadrado");
+    if (padData.buttons & ORBIS_PAD_BUTTON_TRIANGLE)  addPressed("△ Triángulo");
+    if (padData.buttons & ORBIS_PAD_BUTTON_UP)        addPressed("▲ Arriba");
+    if (padData.buttons & ORBIS_PAD_BUTTON_DOWN)      addPressed("▼ Abajo");
+    if (padData.buttons & ORBIS_PAD_BUTTON_LEFT)      addPressed("◀ Izq");
+    if (padData.buttons & ORBIS_PAD_BUTTON_RIGHT)     addPressed("▶ Der");
+    if (padData.buttons & ORBIS_PAD_BUTTON_L1)        addPressed("L1");
+    if (padData.buttons & ORBIS_PAD_BUTTON_R1)        addPressed("R1");
+    if ((padData.buttons & ORBIS_PAD_BUTTON_L2) || rawLT > 20) addPressed("L2");
+    if ((padData.buttons & ORBIS_PAD_BUTTON_R2) || rawRT > 20) addPressed("R2");
+    if (padData.buttons & ORBIS_PAD_BUTTON_L3)        addPressed("L3");
+    if (padData.buttons & ORBIS_PAD_BUTTON_R3)        addPressed("R3");
+    if (padData.buttons & 0x00000001U)                addPressed("Share/Create");
+    if (padData.buttons & ORBIS_PAD_BUTTON_OPTIONS)   addPressed("Options");
+    if (padData.buttons & 0x00010000U)                addPressed("PS");
+    if (padData.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD) addPressed("Clic Táctil");
+    else if (padData.touch.fingers > 0)               addPressed("Dedo Táctil");
 
-    // D-Pad (Cruceta) Live 4-Way Visualizer
-    draw_text(scene, "Cruceta Digital (D-Pad):", fontCardDesc, tpCardX + 18, tpCardY + 218, COLOR_WHITE);
-    bool dUp    = (padData.buttons & ORBIS_PAD_BUTTON_UP) != 0;
-    bool dDown  = (padData.buttons & ORBIS_PAD_BUTTON_DOWN) != 0;
-    bool dLeft  = (padData.buttons & ORBIS_PAD_BUTTON_LEFT) != 0;
-    bool dRight = (padData.buttons & ORBIS_PAD_BUTTON_RIGHT) != 0;
-
-    int dpCenterX = tpCardX + tpCardW / 2;
-    int dpTopY = tpCardY + 230;
-    draw_btn_badge(scene, dpCenterX - 38, dpTopY,      76, 32, "ARRIBA", dUp);
-    draw_btn_badge(scene, dpCenterX - 118, dpTopY + 38, 74, 32, "IZQ",    dLeft);
-    draw_btn_badge(scene, dpCenterX + 44,  dpTopY + 38, 74, 32, "DER",    dRight);
-    draw_btn_badge(scene, dpCenterX - 38, dpTopY + 76, 76, 32, "ABAJO",  dDown);
-
-    // Face & System Buttons Live Matrix
-    draw_text(scene, "Botones Frontales y Sistema:", fontCardDesc, tpCardX + 18, tpCardY + 366, COLOR_WHITE);
-    bool bCross    = (padData.buttons & ORBIS_PAD_BUTTON_CROSS) != 0;
-    bool bCircle   = (padData.buttons & ORBIS_PAD_BUTTON_CIRCLE) != 0;
-    bool bSquare   = (padData.buttons & ORBIS_PAD_BUTTON_SQUARE) != 0;
-    bool bTriangle = (padData.buttons & ORBIS_PAD_BUTTON_TRIANGLE) != 0;
-    bool bShare    = (padData.buttons & 0x00000001U) != 0;
-    bool bOptions  = (padData.buttons & ORBIS_PAD_BUTTON_OPTIONS) != 0;
-
-    int col1X = tpCardX + 18;
-    int col2X = tpCardX + 148;
-    int btnW = 119;
-    int btnH = 34;
-
-    draw_btn_badge(scene, col1X, tpCardY + 380, btnW, btnH, "X (Cruz)",     bCross);
-    draw_btn_badge(scene, col2X, tpCardY + 380, btnW, btnH, "O (Círculo)",  bCircle);
-    draw_btn_badge(scene, col1X, tpCardY + 422, btnW, btnH, "Cuadrado",     bSquare);
-    draw_btn_badge(scene, col2X, tpCardY + 422, btnW, btnH, "Triángulo",    bTriangle);
-    draw_btn_badge(scene, col1X, tpCardY + 464, btnW, btnH, "Share/Create", bShare);
-    draw_btn_badge(scene, col2X, tpCardY + 464, btnW, btnH, "Options",      bOptions);
-    draw_btn_badge(scene, col1X, tpCardY + 506, 249,  btnH, "Clic Panel Táctil (Botón Grande)", tpClicked);
+    draw_rounded_rect(scene, viewCardX + 14, viewCardY + viewCardH - 54, viewCardW - 28, 40, 8, Color{ 10, 18, 34 });
+    draw_rounded_outline(scene, viewCardX + 14, viewCardY + viewCardH - 54, viewCardW - 28, 40, 8,
+                         pressedStr.empty() ? COLOR_BORDER_DIM : Color{ 0, 255, 160 }, 1);
+    draw_text_centered(scene,
+                       pressedStr.empty() ? "Pulsa cualquier botón, mueve sticks o toca el Touchpad para iluminar el 3D" : pressedStr.c_str(),
+                       fontCardDesc,
+                       viewCardX + viewCardW / 2,
+                       viewCardY + viewCardH - 27,
+                       pressedStr.empty() ? COLOR_TEXT_DIM : Color{ 0, 255, 160 });
 
     // ========================================================
     // 4. FOOTER FOR TESTER
@@ -1345,7 +1235,7 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     scene->DrawRectangle(60, 865, 1800, 2, COLOR_DIVIDER);
 
     draw_image(scene, iconMode, 60, 890);
-    snprintf(buf, sizeof(buf), "Probador de Entradas - Ranura %d (Jugador %d)", tester.selectedSlot + 1, tester.selectedSlot + 1);
+    snprintf(buf, sizeof(buf), "Laboratorio 3D - Ranura %d (Jugador %d)", tester.selectedSlot + 1, tester.selectedSlot + 1);
     draw_text(scene, buf, fontCardTitle, 120, 912, COLOR_WHITE);
 
     if (tester.testMode) {
@@ -1356,7 +1246,6 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     } else {
         draw_text(scene, "Modo puro por hardware (entradas independientes por jugador)", fontFooter, 120, 938, COLOR_BLUE_BRIGHT);
 
-        // Hints with authentic button icons (generous horizontal spacing so labels never touch)
         draw_image(scene, btnR3, 760, 897);
         draw_text(scene, "Modo Prueba", fontFooter, 804, 922, COLOR_BLUE_BRIGHT);
 
