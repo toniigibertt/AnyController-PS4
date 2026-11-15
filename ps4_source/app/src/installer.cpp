@@ -358,9 +358,12 @@ static void upgrade_existing_profiles_in_dir(const char* dir_path) {
             const char* name = d->d_name;
             size_t nlen = strlen(name);
             if (nlen > 4 && strcasecmp(name + nlen - 4, ".ini") == 0) {
-                char full_path[256];
-                snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, name);
-                upgrade_ini_file_if_needed(full_path);
+                // Never inject [Rumble] hardware keys into per-controller configuration overrides
+                if (strncmp(name, "ds_mac_", 7) != 0 && strncmp(name, "ds4_slot_", 9) != 0) {
+                    char full_path[256];
+                    snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, name);
+                    upgrade_ini_file_if_needed(full_path);
+                }
             }
             pos += d->d_reclen;
         }

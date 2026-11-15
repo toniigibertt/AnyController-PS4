@@ -1,11 +1,22 @@
 /**
- * AnyController PS4 - Generador y Analizador de Archivos de Configuración INI
- * Compatible 1:1 con el daemon en C de PlayStation 4 (/data/anycontroller/anycontroller.ini)
+ * AnyController PS4 - Generador y Analizador de Archivos de Configuración INI (v1.5.0)
+ * Compatible 1:1 con el daemon en C de PlayStation 4:
+ *   - Global: /data/anycontroller/anycontroller.ini
+ *   - DualSense por MAC: /data/anycontroller/controllers/ds_mac_<MACHEX>.ini
+ *   - DualShock 4 por ranura: /data/anycontroller/controllers/ds4_slot_<1..4>.ini
  */
 import { AppConfig, ControllerProfile } from '../types';
 import { DEADZONE_VALUES, TRIGGER_VALUES } from '../constants/options';
 
-export function generateOneFamilyIni(cfg: AppConfig): string {
+export interface IniExportOptions {
+  targetPath?: string;
+  targetLabel?: string;
+}
+
+export function generateOneFamilyIni(
+  cfg: AppConfig,
+  options?: IniExportOptions
+): string {
   const deadzoneVal = DEADZONE_VALUES[cfg.deadzone_index] ?? 15;
   const triggerVal = TRIGGER_VALUES[cfg.trigger_index] ?? 30;
   const swapVal = cfg.swap_index !== 0 ? 1 : 0;
@@ -13,11 +24,15 @@ export function generateOneFamilyIni(cfg: AppConfig): string {
   const switchVal = cfg.switch_index === 0 ? 1 : 0;
   const backActionVal = cfg.back_button_index === 1 ? 'touchpad' : 'share';
   const guideActionVal = cfg.guide_action === 1 ? 'touchpad' : 'ps';
+  const ps4Path = options?.targetPath || '/data/anycontroller/anycontroller.ini';
+  const targetLine = options?.targetLabel
+    ? `# Objetivo: ${options.targetLabel}\n`
+    : '';
 
   return `# ==============================================================================
-# ANYCONTROLLER Daemon - Archivo de Configuración del Sistema (v1.4.1)
+# ANYCONTROLLER Daemon - Archivo de Configuración del Sistema (v1.5.0)
 # Generado por Controller Control Center PS4 (Title ID: TONI88888)
-# Ubicación en PS4: /data/anycontroller/anycontroller.ini
+${targetLine}# Ubicación en PS4: ${ps4Path}
 # ==============================================================================
 
 [General]
@@ -64,7 +79,6 @@ export function generateControllerIni(profile: ControllerProfile): string {
   const pid = profile.productId.replace('0x', '').toUpperCase().padStart(4, '0');
 
   let buttonsSection = '';
-  // Map buttons 1 to 16 (or up to 32)
   for (let b = 1; b <= 16; b++) {
     let target = 'none';
     for (const [actionKey, btnNum] of Object.entries(profile.assignments)) {
@@ -77,7 +91,7 @@ export function generateControllerIni(profile: ControllerProfile): string {
   }
 
   return `# ==============================================================================
-# AnyController - Perfil de Mando Personalizado
+# AnyController - Perfil de Mando Personalizado (v1.5.0)
 # Archivo: /data/anycontroller/controllers/${vid}_${pid}.ini
 # ==============================================================================
 

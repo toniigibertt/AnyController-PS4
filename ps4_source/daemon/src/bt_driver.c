@@ -97,6 +97,7 @@ typedef struct {
     uint64_t connect_time_us;
     uint64_t last_poll_us;
     uint64_t last_pad_send_us;
+    DaemonConfig profile;
 } BtDevice;
 
 static BtDevice s_devices[BT_MAX_DEVICES];
@@ -130,11 +131,23 @@ static void bt_device_init_entry(BtDevice *dev) {
     dev->last_pad_data.acell.y = 0.0f;
     dev->last_pad_data.acell.z = 0.0f;
     dev->last_pad_data.connected = 1;
+    daemon_config_init_defaults(&dev->profile);
     for (int a = 0; a < 3; ++a) {
         dev->calibration.gyro_scale[a] = (2000.0f * 0.01745329252f) / 32768.0f;
         dev->calibration.accel_scale[a] = 1.0f / 8192.0f;
         dev->calibration.accel_bias[a] = 0.0f;
     }
+}
+
+static void bt_load_device_profile(BtDevice *dev) {
+    if (!dev) return;
+    if (dev->address == 0) {
+        daemon_config_load_device(&dev->profile, NULL);
+        return;
+    }
+    char fname[64];
+    snprintf(fname, sizeof(fname), "ds_mac_%llX.ini", (unsigned long long)dev->address);
+    daemon_config_load_device(&dev->profile, fname);
 }
 
 static void bt_devices_reset(void) {
@@ -187,9 +200,10 @@ static BtDevice* bt_dev_acquire(uint64_t address) {
         if (s_devices[i].address == 0) {
             bt_device_init_entry(&s_devices[i]);
             s_devices[i].address = address;
+            bt_load_device_profile(&s_devices[i]);
             s_devices[i].last_input_time = daemon_sys_time_us();
-            daemon_log(LOG_LEVEL_INFO, "DualSense BT: new device 0x%llX (entry %d)",
-                       (unsigned long long)address, i);
+            daemon_log(LOG_LEVEL_INFO, "DualSense BT: new device 0x%llX (entry %d, dz=%d, lb_mode=%d)",
+                       (unsigned long long)address, i, s_devices[i].profile.stick_deadzone, s_devices[i].profile.dualsense_lightbar_mode);
             return &s_devices[i];
         }
     }
@@ -1163,6 +1177,7 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
     if (!dev->connected) {
         uint64_t now_conn = daemon_sys_time_us();
         dev->connect_time_us = now_conn;
+        bt_load_device_profile(dev);
         if (dev->vpad_slot >= 0) {
             // Reconnecting within grace period!
             bool long_away = (dev->away_since != 0 && (now_conn - dev->away_since) > 120000000ULL);
@@ -1176,7 +1191,7 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
                        (unsigned long long)dev->address, dev->vpad_slot, slot_num);
             vpad_reactivate_slot(dev->vpad_slot);
             dev->last_calibration_attempt = now_conn;
-            if (g_daemon_config.dualsense_bt_mode == 1) {
+            if (dev->profile.dualsense_bt_mode == 1) {
                 if (!dev->capacity_patched && !dev->capacity_failed) {
                     apply_controller_capacity(dev, 0);
                 }
@@ -1200,7 +1215,7 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
             daemon_log(LOG_LEVEL_INFO, "controller_connected: DualSense BT 0x%llX (Slot %d, Player %d)",
                        (unsigned long long)dev->address, dev->vpad_slot, slot_num);
 
-            if (g_daemon_config.dualsense_bt_mode == 1) {
+            if (dev->profile.dualsense_bt_mode == 1) {
                 int cap_rc = apply_controller_capacity(dev, 0);
                 if (cap_rc == 0) {
                     daemon_log(LOG_LEVEL_INFO, "DualSense BT (0x%llX): kernel link capacity patched to 78 bytes (orig=%u)",
@@ -1225,18 +1240,18 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
     OrbisPadData ds4;
     memset(&ds4, 0, sizeof(ds4));
 
-    // Analog Sticks (deadzone + response curve)
-    uint8_t lx = translator_apply_deadzone(data[0], g_daemon_config.stick_deadzone);
-    uint8_t ly = translator_apply_deadzone(data[1], g_daemon_config.stick_deadzone);
-    uint8_t rx = translator_apply_deadzone(data[2], g_daemon_config.stick_deadzone);
-    uint8_t ry = translator_apply_deadzone(data[3], g_daemon_config.stick_deadzone);
+    // Analog Sticks (per-controller deadzone + response curve)
+    uint8_t lx = translator_apply_deadzone_curve(data[0], dev->profile.stick_deadzone, dev->profile.stick_curve);
+    uint8_t ly = translator_apply_deadzone_curve(data[1], dev->profile.stick_deadzone, dev->profile.stick_curve);
+    uint8_t rx = translator_apply_deadzone_curve(data[2], dev->profile.stick_deadzone, dev->profile.stick_curve);
+    uint8_t ry = translator_apply_deadzone_curve(data[3], dev->profile.stick_deadzone, dev->profile.stick_curve);
     ds4.leftStick.x  = lx;
     ds4.leftStick.y  = ly;
     ds4.rightStick.x = rx;
     ds4.rightStick.y = ry;
 
     // Analog Triggers
-    if (g_daemon_config.swap_triggers_bumpers) {
+    if (dev->profile.swap_triggers_bumpers) {
         ds4.analogButtons.l2 = (data[8] & 0x01) ? 255 : 0;
         ds4.analogButtons.r2 = (data[8] & 0x02) ? 255 : 0;
     } else {
@@ -1254,16 +1269,16 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
     if (data[7] & 0x80) ds4.buttons |= DS4_BUTTON_TRIANGLE;
 
     // Bumpers, Triggers & Stick Clicks
-    if (g_daemon_config.swap_triggers_bumpers) {
+    if (dev->profile.swap_triggers_bumpers) {
         if (data[8] & 0x01) ds4.buttons |= DS4_BUTTON_L2;
         if (data[8] & 0x02) ds4.buttons |= DS4_BUTTON_R2;
-        if ((data[8] & 0x04) || data[4] >= g_daemon_config.trigger_threshold) ds4.buttons |= DS4_BUTTON_L1;
-        if ((data[8] & 0x08) || data[5] >= g_daemon_config.trigger_threshold) ds4.buttons |= DS4_BUTTON_R1;
+        if ((data[8] & 0x04) || data[4] >= dev->profile.trigger_threshold) ds4.buttons |= DS4_BUTTON_L1;
+        if ((data[8] & 0x08) || data[5] >= dev->profile.trigger_threshold) ds4.buttons |= DS4_BUTTON_R1;
     } else {
         if (data[8] & 0x01) ds4.buttons |= DS4_BUTTON_L1;
         if (data[8] & 0x02) ds4.buttons |= DS4_BUTTON_R1;
-        if ((data[8] & 0x04) || data[4] >= g_daemon_config.trigger_threshold) ds4.buttons |= DS4_BUTTON_L2;
-        if ((data[8] & 0x08) || data[5] >= g_daemon_config.trigger_threshold) ds4.buttons |= DS4_BUTTON_R2;
+        if ((data[8] & 0x04) || data[4] >= dev->profile.trigger_threshold) ds4.buttons |= DS4_BUTTON_L2;
+        if ((data[8] & 0x08) || data[5] >= dev->profile.trigger_threshold) ds4.buttons |= DS4_BUTTON_R2;
     }
     if (data[8] & 0x10) ds4.buttons |= DS4_BUTTON_SHARE;   // Create
     if (data[8] & 0x20) ds4.buttons |= DS4_BUTTON_OPTIONS; // Options
@@ -1275,7 +1290,7 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
     if (data[9] & 0x02) ds4.buttons |= DS4_BUTTON_TOUCHPAD;
 
     // DualSense Mute Button (bit 2 of data[9])
-    if (g_daemon_config.dualsense_mute_action == 1 && (data[9] & 0x04)) {
+    if (dev->profile.dualsense_mute_action == 1 && (data[9] & 0x04)) {
         ds4.buttons |= DS4_BUTTON_TOUCHPAD;
     }
 
@@ -1284,7 +1299,7 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
 
     // Rapid-Fire / Turbo Mod (0=Off, 1=Turbo R2, 2=Turbo L2+R2)
     // Toggles trigger state every ~32ms (~15 Hz shots/sec) when trigger is held >= 200
-    if (g_daemon_config.rapid_fire > 0) {
+    if (dev->profile.rapid_fire > 0) {
         dev->rapid_fire_phase++;
         bool pulse_off = ((dev->rapid_fire_phase / 8) & 1) != 0;
         if (ds4.analogButtons.r2 >= 200) {
@@ -1293,7 +1308,7 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
                 ds4.buttons &= ~DS4_BUTTON_R2;
             }
         }
-        if (g_daemon_config.rapid_fire == 2 && ds4.analogButtons.l2 >= 200) {
+        if (dev->profile.rapid_fire == 2 && ds4.analogButtons.l2 >= 200) {
             if (pulse_off) {
                 ds4.analogButtons.l2 = 0;
                 ds4.buttons &= ~DS4_BUTTON_L2;
@@ -1579,7 +1594,7 @@ void bt_driver_poll_step(void) {
                     existing->output_errors = 0;
                     existing->output_unsupported = false;
                     existing->next_output_retry_us = 0;
-                    if (g_daemon_config.dualsense_bt_mode == 1) {
+                    if (existing->profile.dualsense_bt_mode == 1) {
                         apply_controller_capacity(existing, 0);
                     }
                     if (existing->connected) {
@@ -1669,7 +1684,7 @@ void bt_driver_poll_step(void) {
     now_us = daemon_sys_time_us();
     for (int i = 0; i < BT_MAX_DEVICES; ++i) {
         BtDevice *dev = &s_devices[i];
-        if (!dev->connected || !dev->address || g_daemon_config.dualsense_bt_mode != 1 || dev->output_unsupported) {
+        if (!dev->connected || !dev->address || dev->profile.dualsense_bt_mode != 1 || dev->output_unsupported) {
             continue;
         }
         if ((dev->needs_reinit || !dev->capacity_patched) && !dev->capacity_failed) {
@@ -1678,8 +1693,8 @@ void bt_driver_poll_step(void) {
             }
         }
         if (dev->capacity_patched && now_us >= dev->next_output_retry_us) {
-            bool dynamic_rgb = (g_daemon_config.dualsense_lightbar_mode == 4 ||
-                                g_daemon_config.dualsense_lightbar_mode == 5);
+            bool dynamic_rgb = (dev->profile.dualsense_lightbar_mode == 4 ||
+                                dev->profile.dualsense_lightbar_mode == 5);
             uint64_t interval = (!dev->initialized_output || !dev->led_synced) ? 50000ULL : (dynamic_rgb ? 80000ULL : 800000ULL);
             if (now_us - dev->last_output_time >= interval) {
                 bt_send_rumble_dev(dev, dev->last_rumble_lg, dev->last_rumble_sm, dev->last_color);
@@ -1924,7 +1939,7 @@ int bt_driver_connected_count(void) {
 
 static void bt_send_rumble_dev(BtDevice* dev, uint8_t large, uint8_t small, const uint8_t color[3]) {
     if (!dev || !dev->connected || s_bt_fd < 0 || !dev->address) return;
-    if (g_daemon_config.dualsense_bt_mode != 1) return;
+    if (dev->profile.dualsense_bt_mode != 1) return;
     if (!dev->capacity_patched && !dev->capacity_failed) {
         apply_controller_capacity(dev, 0);
     }
@@ -1963,7 +1978,7 @@ static void bt_send_rumble_dev(BtDevice* dev, uint8_t large, uint8_t small, cons
         out[6] = large;             // Strong motor
 
         // 1. Adaptive Trigger Effects (calibrated physical presets for DualSense Simple Modes)
-        int trig = g_daemon_config.dualsense_trigger_mode;
+        int trig = dev->profile.dualsense_trigger_mode;
         if (trig == 1) {
             // Hair Trigger: firm snap click between ~12% (0x20) and ~31% (0x50) of travel at full strength (0xFF)
             out[13] = 0x02; out[14] = 0x20; out[15] = 0x50; out[16] = 0xFF;
@@ -1983,13 +1998,13 @@ static void bt_send_rumble_dev(BtDevice* dev, uint8_t large, uint8_t small, cons
         }
 
         // 2. LED Brightness (Player Indicator LEDs + RGB Lightbar intensity)
-        int br = g_daemon_config.dualsense_brightness;
+        int br = dev->profile.dualsense_brightness;
         if (br < 0 || br > 2) br = 0;
         out[41] = 0x01;         // Player indicator brightness control enable
         out[45] = (uint8_t)br;  // 0=High, 1=Medium, 2=Low
 
         // 3. Player Indicator LEDs (out[46])
-        int p_led = g_daemon_config.dualsense_player_leds;
+        int p_led = dev->profile.dualsense_player_leds;
         if (p_led == 1) {
             out[46] = 0x1F; // All 5 LEDs On
         } else if (p_led == 2) {
@@ -2017,10 +2032,10 @@ static void bt_send_rumble_dev(BtDevice* dev, uint8_t large, uint8_t small, cons
             { 0, 255, 255 },  // 4: Cyan
             { 255, 255, 255 } // 5: White
         };
-        int c_idx = g_daemon_config.dualsense_lightbar_color;
+        int c_idx = dev->profile.dualsense_lightbar_color;
         if (c_idx < 0 || c_idx > 5) c_idx = 0;
 
-        int lb_mode = g_daemon_config.dualsense_lightbar_mode;
+        int lb_mode = dev->profile.dualsense_lightbar_mode;
         if (lb_mode == 1) {
             // Static Color
             out[47] = static_colors[c_idx][0];
@@ -2149,8 +2164,8 @@ void bt_driver_send_rumble(uint8_t large, uint8_t small, const uint8_t color[3])
     }
 }
 
-void bt_driver_refresh_settings(void) {
-    usb_driver_load_remap_for_bt();
+static void bt_apply_device_output(BtDevice *dev) {
+    if (!dev || !dev->connected) return;
     static const uint8_t static_colors[6][3] = {
         { 0, 112, 209 },  // 0: PlayStation Blue
         { 255, 0, 0 },    // 1: Red
@@ -2159,26 +2174,57 @@ void bt_driver_refresh_settings(void) {
         { 0, 255, 255 },  // 4: Cyan
         { 255, 255, 255 } // 5: White
     };
-    int c_idx = g_daemon_config.dualsense_lightbar_color;
+    if (dev->profile.dualsense_bt_mode == 0) {
+        if (dev->capacity_patched) {
+            apply_controller_capacity(dev, 1);
+        }
+        dev->initialized_output = false;
+        dev->led_synced = false;
+        return;
+    }
+    int c_idx = dev->profile.dualsense_lightbar_color;
     if (c_idx < 0 || c_idx > 5) c_idx = 0;
+    dev->capacity_failed = false;
+    if (!dev->capacity_patched) {
+        apply_controller_capacity(dev, 0);
+    }
+    dev->output_unsupported = false;
+    dev->output_errors = 0;
+    dev->next_output_retry_us = 0;
+    bt_send_rumble_dev(dev, 0, 0, static_colors[c_idx]);
+}
+
+void bt_driver_refresh_settings(void) {
+    usb_driver_load_remap_for_bt();
     for (int i = 0; i < BT_MAX_DEVICES; ++i) {
         if (s_devices[i].connected) {
-            if (g_daemon_config.dualsense_bt_mode == 0) {
-                if (s_devices[i].capacity_patched) {
-                    apply_controller_capacity(&s_devices[i], 1);
-                }
-                s_devices[i].initialized_output = false;
-                s_devices[i].led_synced = false;
-                continue;
-            }
-            s_devices[i].capacity_failed = false;
-            if (!s_devices[i].capacity_patched) {
-                apply_controller_capacity(&s_devices[i], 0);
-            }
-            s_devices[i].output_unsupported = false;
-            s_devices[i].output_errors = 0;
-            s_devices[i].next_output_retry_us = 0;
-            bt_send_rumble_dev(&s_devices[i], 0, 0, static_colors[c_idx]);
+            bt_load_device_profile(&s_devices[i]);
+            bt_apply_device_output(&s_devices[i]);
         }
     }
+}
+
+void bt_driver_reload_profiles(void) {
+    for (int i = 0; i < BT_MAX_DEVICES; ++i) {
+        if (!s_devices[i].connected || !s_devices[i].address) continue;
+        DaemonConfig prev = s_devices[i].profile;
+        bt_load_device_profile(&s_devices[i]);
+        if (memcmp(&prev, &s_devices[i].profile, sizeof(DaemonConfig)) != 0) {
+            daemon_log(LOG_LEVEL_INFO, "DualSense BT (0x%llX): per-device profile updated on the fly",
+                       (unsigned long long)s_devices[i].address);
+            bt_apply_device_output(&s_devices[i]);
+        }
+    }
+}
+
+bool bt_driver_get_slot_config(int vpad_slot, int *out_enable_rumble, int *out_lightbar_mode) {
+    if (vpad_slot < 0) return false;
+    for (int i = 0; i < BT_MAX_DEVICES; ++i) {
+        if (s_devices[i].connected && s_devices[i].vpad_slot == vpad_slot) {
+            if (out_enable_rumble) *out_enable_rumble = s_devices[i].profile.enable_rumble;
+            if (out_lightbar_mode) *out_lightbar_mode = s_devices[i].profile.dualsense_lightbar_mode;
+            return true;
+        }
+    }
+    return false;
 }

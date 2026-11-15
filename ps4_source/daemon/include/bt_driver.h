@@ -70,6 +70,8 @@ void bt_driver_send_rumble_slot(int vpad_slot, uint8_t large, uint8_t small, con
  * to all connected DualSense controllers on the fly without waiting for game rumble events.
  */
 void bt_driver_refresh_settings(void);
+void bt_driver_reload_profiles(void);
+bool bt_driver_get_slot_config(int vpad_slot, int *out_enable_rumble, int *out_lightbar_mode);
 
 /**
  * Write current DualSense multi-controller connection, battery, charging, and profile status

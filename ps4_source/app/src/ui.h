@@ -9,6 +9,22 @@
 #include "controller_3d.h"
 #include <orbis/Pad.h>
 #include <string>
+#include <vector>
+
+struct ControllerTarget {
+    std::string id;          // "", "ds_mac_<MAC>", or "ds4_slot_<1..4>"
+    std::string shortLabel;  // "Global", "J1 DualSense", "J2 DualShock 4"
+    std::string detailLabel; // Full descriptive label
+    bool isDualSense;
+    int slotIndex;           // -1 = global, 0..3 = player slot
+    bool hasCustom;
+    int batteryPct;
+    bool charging;
+
+    ControllerTarget()
+        : isDualSense(false), slotIndex(-1), hasCustom(false),
+          batteryPct(100), charging(false) {}
+};
 
 struct ImageRGBA {
     int width;
@@ -30,14 +46,19 @@ struct CalibrationState {
 };
 
 struct TesterState {
-    int rumbleFrames;       // countdown for active rumble test (e.g. 180 frames = 3s)
-    int rumblePhase;        // 0 = none, 1 = left (heavy), 2 = right (light), 3 = both
-    int selectedSlot;       // 0..3 (Player 1..4)
-    bool slotConnected[4];  // whether each slot is currently active/connected
-    bool testMode;          // true when inputs are isolated for testing
+    int rumbleFrames;         // countdown for active rumble test (180 frames = 3s)
+    int rumblePhase;          // 0 = none, 1 = left (heavy), 2 = right (light), 3 = both
+    int selectedSlot;         // 0..3 (Player 1..4)
+    bool slotConnected[4];    // whether each slot is currently active/connected
+    bool testMode;            // true when inputs are isolated for testing
+    int testerMenuRow;        // 0..4 highlighted action row inside Tester
+    int testerModelOverride;  // 0=Auto, 1=PS5 DualSense, 2=PS4 DualShock 4
+    int testModeHoldFrames;   // hold OPTIONS countdown (0..45 frames) to exit testMode safely
     CalibrationState calib;
 
-    TesterState() : rumbleFrames(0), rumblePhase(0), selectedSlot(0), testMode(false) {
+    TesterState()
+        : rumbleFrames(0), rumblePhase(0), selectedSlot(0), testMode(false),
+          testerMenuRow(0), testerModelOverride(0), testModeHoldFrames(0) {
         for (int i = 0; i < 4; i++) slotConnected[i] = false;
     }
 };
@@ -65,7 +86,9 @@ public:
                 bool remapTestMode = false,
                 const PkgUpdater* updater = NULL,
                 bool dualsenseConnected = false, int dsSelectedCard = 0,
-                int ds4SelectedCard = 0, bool dualshock4Connected = true);
+                int ds4SelectedCard = 0, bool dualshock4Connected = true,
+                const std::vector<ControllerTarget>* targets = NULL,
+                int activeTargetIndex = 0);
     void render_wizard(Scene2D* scene, const InstallResult& res, int frameID);
 
 private:
@@ -120,10 +143,11 @@ private:
     void draw_text(Scene2D* scene, const std::string& text, FT_Face face, int startX, int baselineY, Color color);
     void draw_text_centered(Scene2D* scene, const std::string& text, FT_Face face, int centerX, int baselineY, Color color);
     void draw_option_guide_box(Scene2D* scene, const char* optionTitle, const char* whatItDoes, const char* currentValEffect, Color accentColor);
+    void draw_target_selector_strip(Scene2D* scene, const std::vector<ControllerTarget>* targets, int activeTargetIndex);
 
-    void render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester, bool dualsenseConnected);
-    void render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard, const HidStatus& status);
-    void render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCard, const OrbisPadData& padData, const TesterState& tester);
+    void render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester, bool dualsenseConnected, const char* targetShortLabel);
+    void render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard, const HidStatus& status, const std::vector<ControllerTarget>* targets, int activeTargetIndex);
+    void render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCard, const OrbisPadData& padData, const TesterState& tester, const std::vector<ControllerTarget>* targets, int activeTargetIndex);
     void render_remap(Scene2D* scene, const HidStatus& status, const HidProfile& profile,
                       int selectedRow, const OrbisPadData& padData, bool testMode = false);
 };

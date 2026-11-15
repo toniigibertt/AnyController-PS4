@@ -42,7 +42,7 @@ static inline uint8_t convert_stick_value(int16_t xbox_val) {
 /*
  * Apply deadzone and response curve to stick value
  */
-uint8_t translator_apply_deadzone(uint8_t value, uint8_t deadzone) {
+uint8_t translator_apply_deadzone_curve(uint8_t value, uint8_t deadzone, int curve) {
     int32_t centered = (int32_t)value - 128;
     int32_t abs_centered = (centered < 0) ? -centered : centered;
     if (abs_centered > 127) abs_centered = 127;
@@ -57,7 +57,6 @@ uint8_t translator_apply_deadzone(uint8_t value, uint8_t deadzone) {
         scaled = ((abs_centered - deadzone) * 127) / range;
     }
 
-    int curve = g_daemon_config.stick_curve;
     if (curve == 1) {
         // Precision Exponential (70% quadratic + 30% linear for fine micro-aiming near center)
         int32_t quad = (scaled * scaled) / 127;
@@ -78,6 +77,10 @@ uint8_t translator_apply_deadzone(uint8_t value, uint8_t deadzone) {
         int32_t out = 128 + scaled;
         return (uint8_t)(out > 255 ? 255 : out);
     }
+}
+
+uint8_t translator_apply_deadzone(uint8_t value, uint8_t deadzone) {
+    return translator_apply_deadzone_curve(value, deadzone, g_daemon_config.stick_curve);
 }
 
 /*

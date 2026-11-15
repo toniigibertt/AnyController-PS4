@@ -4,16 +4,8 @@
 
 namespace {
 
-struct Vec3 {
-    float x, y, z;
-};
-
 struct Vec2 {
     float x, y;
-};
-
-struct ProjVert {
-    float sx, sy, depth;
 };
 
 static inline float clampf(float v, float lo, float hi) {
@@ -52,66 +44,14 @@ static Color hsv_to_rgb(float h, float s, float v) {
     return Color{ clampu8((int)(r * 255.0f)), clampu8((int)(g * 255.0f)), clampu8((int)(b * 255.0f)) };
 }
 
-struct Xform3D {
-    float yaw;
-    float pitch;
-    float roll;
-    float ox, oy, oz;
-    float cx, cy;
-    float scale;
-    float fov;
-
-    ProjVert project(Vec3 p) const {
-        // Rotate around X (pitch), Y (yaw), Z (roll)
-        float cp = cosf(pitch), sp = sinf(pitch);
-        float y1 = p.y * cp - p.z * sp;
-        float z1 = p.y * sp + p.z * cp;
-        float x1 = p.x;
-
-        float cyaw = cosf(yaw), syaw = sinf(yaw);
-        float x2 = x1 * cyaw + z1 * syaw;
-        float z2 = -x1 * syaw + z1 * cyaw;
-        float y2 = y1;
-
-        float cr = cosf(roll), sr = sinf(roll);
-        float x3 = x2 * cr - y2 * sr;
-        float y3 = x2 * sr + y2 * cr;
-        float z3 = z2;
-
-        float wx = x3 + ox;
-        float wy = y3 + oy;
-        float wz = z3 + oz;
-
-        float camDist = fov + wz;
-        if (camDist < 0.8f) camDist = 0.8f;
-        float persp = fov / camDist;
-
-        return ProjVert{
-            cx + wx * scale * persp,
-            cy + wy * scale * persp,
-            wz
-        };
-    }
-
-    Vec3 rotate_normal(Vec3 n) const {
-        float cp = cosf(pitch), sp = sinf(pitch);
-        float y1 = n.y * cp - n.z * sp;
-        float z1 = n.y * sp + n.z * cp;
-        float x1 = n.x;
-
-        float cyaw = cosf(yaw), syaw = sinf(yaw);
-        float x2 = x1 * cyaw + z1 * syaw;
-        float z2 = -x1 * syaw + z1 * cyaw;
-        float y2 = y1;
-
-        float cr = cosf(roll), sr = sinf(roll);
-        return Vec3{ x2 * cr - y2 * sr, x2 * sr + y2 * cr, z2 };
-    }
+struct ClipRect {
+    int x1, y1, x2, y2;
 };
 
-// Fast clipped blend pixel helper writing directly to Scene2D framebuffer
-static inline void blend_pixel_fb(uint32_t* fb, int fbW, int fbH, int x, int y, Color c, uint8_t alpha) {
-    if (x < 0 || x >= fbW || y < 0 || y >= fbH || alpha == 0) return;
+static inline void blend_px(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                            int x, int y, Color c, uint8_t alpha) {
+    if (alpha == 0 || x < cl.x1 || x > cl.x2 || y < cl.y1 || y > cl.y2) return;
+    if (x < 0 || x >= fbW || y < 0 || y >= fbH) return;
     int idx = y * fbW + x;
     if (alpha >= 255) {
         fb[idx] = 0x80000000U | ((uint32_t)c.r << 16) | ((uint32_t)c.g << 8) | c.b;
@@ -121,250 +61,489 @@ static inline void blend_pixel_fb(uint32_t* fb, int fbW, int fbH, int x, int y, 
     uint32_t bgR = (bg >> 16) & 0xFF;
     uint32_t bgG = (bg >> 8) & 0xFF;
     uint32_t bgB = bg & 0xFF;
-    uint32_t inv = 255 - alpha;
-    uint32_t r = (c.r * alpha + bgR * inv) / 255;
-    uint32_t g = (c.g * alpha + bgG * inv) / 255;
-    uint32_t b = (c.b * alpha + bgB * inv) / 255;
+    uint32_t inv = 255U - alpha;
+    uint32_t r = (c.r * alpha + bgR * inv) / 255U;
+    uint32_t g = (c.g * alpha + bgG * inv) / 255U;
+    uint32_t b = (c.b * alpha + bgB * inv) / 255U;
     fb[idx] = 0x80000000U | (r << 16) | (g << 8) | b;
 }
 
-static inline void add_pixel_fb(uint32_t* fb, int fbW, int fbH, int x, int y, Color c, uint8_t alpha) {
-    if (x < 0 || x >= fbW || y < 0 || y >= fbH || alpha == 0) return;
+static inline void add_px(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                          int x, int y, Color c, uint8_t alpha) {
+    if (alpha == 0 || x < cl.x1 || x > cl.x2 || y < cl.y1 || y > cl.y2) return;
+    if (x < 0 || x >= fbW || y < 0 || y >= fbH) return;
     int idx = y * fbW + x;
     uint32_t bg = fb[idx];
     uint32_t bgR = (bg >> 16) & 0xFF;
     uint32_t bgG = (bg >> 8) & 0xFF;
     uint32_t bgB = bg & 0xFF;
-    uint32_t r = bgR + (c.r * alpha) / 255; if (r > 255) r = 255;
-    uint32_t g = bgG + (c.g * alpha) / 255; if (g > 255) g = 255;
-    uint32_t b = bgB + (c.b * alpha) / 255; if (b > 255) b = 255;
+    uint32_t r = bgR + (c.r * alpha) / 255U; if (r > 255U) r = 255U;
+    uint32_t g = bgG + (c.g * alpha) / 255U; if (g > 255U) g = 255U;
+    uint32_t b = bgB + (c.b * alpha) / 255U; if (b > 255U) b = 255U;
     fb[idx] = 0x80000000U | (r << 16) | (g << 8) | b;
 }
 
-static void fill_triangle(uint32_t* fb, int fbW, int fbH,
-                          int clipX1, int clipY1, int clipX2, int clipY2,
-                          Vec2 p0, Vec2 p1, Vec2 p2, Color col, uint8_t alpha = 255) {
-    if (p0.y > p1.y) { Vec2 t = p0; p0 = p1; p1 = t; }
-    if (p1.y > p2.y) { Vec2 t = p1; p1 = p2; p2 = t; }
-    if (p0.y > p1.y) { Vec2 t = p0; p0 = p1; p1 = t; }
+static void fill_circle_aa(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                           float cx, float cy, float r, Color col, uint8_t alpha = 255) {
+    int x0 = (int)floorf(cx - r - 1.5f);
+    int x1 = (int)ceilf(cx + r + 1.5f);
+    int y0 = (int)floorf(cy - r - 1.5f);
+    int y1 = (int)ceilf(cy + r + 1.5f);
+    if (x0 < cl.x1) x0 = cl.x1;
+    if (x1 > cl.x2) x1 = cl.x2;
+    if (y0 < cl.y1) y0 = cl.y1;
+    if (y1 > cl.y2) y1 = cl.y2;
 
-    int minY = (int)ceilf(p0.y);
-    int maxY = (int)floorf(p2.y);
-    if (minY < clipY1) minY = clipY1;
-    if (maxY > clipY2) maxY = clipY2;
-    if (minY > maxY) return;
-
-    float totalH = p2.y - p0.y;
-    if (totalH < 0.001f) return;
-
-    uint32_t solid = 0x80000000U | ((uint32_t)col.r << 16) | ((uint32_t)col.g << 8) | col.b;
-
-    for (int y = minY; y <= maxY; y++) {
-        bool secondHalf = ((float)y > p1.y) || (p1.y == p0.y);
-        float segH = secondHalf ? (p2.y - p1.y) : (p1.y - p0.y);
-        if (segH < 0.0001f) segH = 0.0001f;
-
-        float alphaA = ((float)y - p0.y) / totalH;
-        float alphaB = secondHalf ? (((float)y - p1.y) / segH) : (((float)y - p0.y) / segH);
-
-        float ax = p0.x + (p2.x - p0.x) * alphaA;
-        float bx = secondHalf ? (p1.x + (p2.x - p1.x) * alphaB) : (p0.x + (p1.x - p0.x) * alphaB);
-
-        if (ax > bx) { float t = ax; ax = bx; bx = t; }
-        int xStart = (int)ceilf(ax);
-        int xEnd = (int)floorf(bx);
-        if (xStart < clipX1) xStart = clipX1;
-        if (xEnd > clipX2) xEnd = clipX2;
-        if (xStart > xEnd) continue;
-
-        if (alpha >= 255) {
-            uint32_t* row = fb + y * fbW;
-            for (int x = xStart; x <= xEnd; x++) row[x] = solid;
-        } else {
-            for (int x = xStart; x <= xEnd; x++) blend_pixel_fb(fb, fbW, fbH, x, y, col, alpha);
+    for (int y = y0; y <= y1; y++) {
+        float dy = (float)y - cy;
+        for (int x = x0; x <= x1; x++) {
+            float dx = (float)x - cx;
+            float d = sqrtf(dx * dx + dy * dy);
+            float cov = clampf(r + 0.5f - d, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, col, (uint8_t)(alpha * cov));
+            }
         }
     }
 }
 
-static void fill_quad(uint32_t* fb, int fbW, int fbH,
-                      int cx1, int cy1, int cx2, int cy2,
-                      Vec2 a, Vec2 b, Vec2 c, Vec2 d, Color col, uint8_t alpha = 255) {
-    fill_triangle(fb, fbW, fbH, cx1, cy1, cx2, cy2, a, b, c, col, alpha);
-    fill_triangle(fb, fbW, fbH, cx1, cy1, cx2, cy2, a, c, d, col, alpha);
+static void fill_circle_shaded(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                               float cx, float cy, float r, Color topCol, Color botCol, uint8_t alpha = 255) {
+    int x0 = (int)floorf(cx - r - 1.5f);
+    int x1 = (int)ceilf(cx + r + 1.5f);
+    int y0 = (int)floorf(cy - r - 1.5f);
+    int y1 = (int)ceilf(cy + r + 1.5f);
+    if (x0 < cl.x1) x0 = cl.x1;
+    if (x1 > cl.x2) x1 = cl.x2;
+    if (y0 < cl.y1) y0 = cl.y1;
+    if (y1 > cl.y2) y1 = cl.y2;
+
+    for (int y = y0; y <= y1; y++) {
+        float dy = (float)y - cy;
+        float t = clampf((dy + r) / (2.0f * r + 0.001f), 0.0f, 1.0f);
+        Color rowCol = lerp_color(topCol, botCol, t);
+        for (int x = x0; x <= x1; x++) {
+            float dx = (float)x - cx;
+            float d = sqrtf(dx * dx + dy * dy);
+            float cov = clampf(r + 0.5f - d, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, rowCol, (uint8_t)(alpha * cov));
+            }
+        }
+    }
 }
 
-static void draw_line_aa(uint32_t* fb, int fbW, int fbH,
-                         int cx1, int cy1, int cx2, int cy2,
+static void stroke_circle_aa(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                             float cx, float cy, float r, float thickness, Color col, uint8_t alpha = 255) {
+    float halfT = thickness * 0.5f;
+    float rOut = r + halfT + 1.5f;
+    int x0 = (int)floorf(cx - rOut);
+    int x1 = (int)ceilf(cx + rOut);
+    int y0 = (int)floorf(cy - rOut);
+    int y1 = (int)ceilf(cy + rOut);
+    if (x0 < cl.x1) x0 = cl.x1;
+    if (x1 > cl.x2) x1 = cl.x2;
+    if (y0 < cl.y1) y0 = cl.y1;
+    if (y1 > cl.y2) y1 = cl.y2;
+
+    for (int y = y0; y <= y1; y++) {
+        float dy = (float)y - cy;
+        for (int x = x0; x <= x1; x++) {
+            float dx = (float)x - cx;
+            float d = fabsf(sqrtf(dx * dx + dy * dy) - r);
+            float cov = clampf(halfT + 0.6f - d, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, col, (uint8_t)(alpha * cov));
+            }
+        }
+    }
+}
+
+static void draw_glow_disc(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                           float cx, float cy, float r, Color col, uint8_t peakAlpha) {
+    int x0 = (int)floorf(cx - r);
+    int x1 = (int)ceilf(cx + r);
+    int y0 = (int)floorf(cy - r);
+    int y1 = (int)ceilf(cy + r);
+    if (x0 < cl.x1) x0 = cl.x1;
+    if (x1 > cl.x2) x1 = cl.x2;
+    if (y0 < cl.y1) y0 = cl.y1;
+    if (y1 > cl.y2) y1 = cl.y2;
+    for (int y = y0; y <= y1; y++) {
+        float dy = (float)y - cy;
+        for (int x = x0; x <= x1; x++) {
+            float dx = (float)x - cx;
+            float d = sqrtf(dx * dx + dy * dy);
+            if (d < r) {
+                float norm = 1.0f - (d / r);
+                uint8_t a = (uint8_t)(peakAlpha * norm * norm);
+                add_px(fb, fbW, fbH, cl, x, y, col, a);
+            }
+        }
+    }
+}
+
+static float dist_point_to_seg(float px, float py, float x0, float y0, float x1, float y1) {
+    float vx = x1 - x0;
+    float vy = y1 - y0;
+    float len2 = vx * vx + vy * vy;
+    if (len2 < 0.0001f) {
+        float dx = px - x0, dy = py - y0;
+        return sqrtf(dx * dx + dy * dy);
+    }
+    float t = clampf(((px - x0) * vx + (py - y0) * vy) / len2, 0.0f, 1.0f);
+    float projX = x0 + vx * t;
+    float projY = y0 + vy * t;
+    float dx = px - projX, dy = py - projY;
+    return sqrtf(dx * dx + dy * dy);
+}
+
+static void draw_capsule_shaded(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                                float x0, float y0, float x1, float y1,
+                                float r0, float r1,
+                                Color topCol, Color botCol, uint8_t alpha = 255) {
+    float maxR = (r0 > r1) ? r0 : r1;
+    int bx0 = (int)floorf(((x0 < x1) ? x0 : x1) - maxR - 2.0f);
+    int bx1 = (int)ceilf(((x0 > x1) ? x0 : x1) + maxR + 2.0f);
+    int by0 = (int)floorf(((y0 < y1) ? y0 : y1) - maxR - 2.0f);
+    int by1 = (int)ceilf(((y0 > y1) ? y0 : y1) + maxR + 2.0f);
+    if (bx0 < cl.x1) bx0 = cl.x1;
+    if (bx1 > cl.x2) bx1 = cl.x2;
+    if (by0 < cl.y1) by0 = cl.y1;
+    if (by1 > cl.y2) by1 = cl.y2;
+
+    float vx = x1 - x0;
+    float vy = y1 - y0;
+    float len2 = vx * vx + vy * vy;
+    float spanY = (float)(by1 - by0 + 1);
+
+    for (int y = by0; y <= by1; y++) {
+        float fy = clampf((float)(y - by0) / spanY, 0.0f, 1.0f);
+        Color rowCol = lerp_color(topCol, botCol, fy);
+        for (int x = bx0; x <= bx1; x++) {
+            float t = (len2 > 0.0001f) ? clampf((((float)x - x0) * vx + ((float)y - y0) * vy) / len2, 0.0f, 1.0f) : 0.0f;
+            float projX = x0 + vx * t;
+            float projY = y0 + vy * t;
+            float rad = r0 + (r1 - r0) * t;
+            float dx = (float)x - projX;
+            float dy = (float)y - projY;
+            float d = sqrtf(dx * dx + dy * dy);
+            float cov = clampf(rad + 0.6f - d, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, rowCol, (uint8_t)(alpha * cov));
+            }
+        }
+    }
+}
+
+static void draw_line_aa(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
                          float x0, float y0, float x1, float y1,
                          float thickness, Color col, uint8_t alpha = 255) {
-    float dx = x1 - x0;
-    float dy = y1 - y0;
-    float len = sqrtf(dx * dx + dy * dy);
-    if (len < 0.001f) return;
-    int steps = (int)ceilf(len * 1.5f);
-    int r = (int)ceilf(thickness * 0.5f);
-    for (int s = 0; s <= steps; s++) {
-        float t = (float)s / steps;
-        int px = (int)roundf(x0 + dx * t);
-        int py = (int)roundf(y0 + dy * t);
-        for (int oy = -r; oy <= r; oy++) {
-            int yy = py + oy;
-            if (yy < cy1 || yy > cy2) continue;
-            for (int ox = -r; ox <= r; ox++) {
-                int xx = px + ox;
-                if (xx < cx1 || xx > cx2) continue;
-                if (ox * ox + oy * oy <= r * r + 1) {
-                    blend_pixel_fb(fb, fbW, fbH, xx, yy, col, alpha);
+    float halfT = thickness * 0.5f;
+    int bx0 = (int)floorf(((x0 < x1) ? x0 : x1) - halfT - 2.0f);
+    int bx1 = (int)ceilf(((x0 > x1) ? x0 : x1) + halfT + 2.0f);
+    int by0 = (int)floorf(((y0 < y1) ? y0 : y1) - halfT - 2.0f);
+    int by1 = (int)ceilf(((y0 > y1) ? y0 : y1) + halfT + 2.0f);
+    if (bx0 < cl.x1) bx0 = cl.x1;
+    if (bx1 > cl.x2) bx1 = cl.x2;
+    if (by0 < cl.y1) by0 = cl.y1;
+    if (by1 > cl.y2) by1 = cl.y2;
+
+    for (int y = by0; y <= by1; y++) {
+        for (int x = bx0; x <= bx1; x++) {
+            float d = dist_point_to_seg((float)x, (float)y, x0, y0, x1, y1);
+            float cov = clampf(halfT + 0.6f - d, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, col, (uint8_t)(alpha * cov));
+            }
+        }
+    }
+}
+
+static void draw_round_rect_aa(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                               float rx, float ry, float rw, float rh, float rad,
+                               Color topCol, Color botCol, uint8_t alpha = 255) {
+    if (rw <= 0.0f || rh <= 0.0f) return;
+    float r = clampf(rad, 0.0f, ((rw < rh ? rw : rh) * 0.5f));
+    float cx = rx + rw * 0.5f;
+    float cy = ry + rh * 0.5f;
+    float hx = rw * 0.5f - r;
+    float hy = rh * 0.5f - r;
+
+    int x0 = (int)floorf(rx - 1.5f);
+    int x1 = (int)ceilf(rx + rw + 1.5f);
+    int y0 = (int)floorf(ry - 1.5f);
+    int y1 = (int)ceilf(ry + rh + 1.5f);
+    if (x0 < cl.x1) x0 = cl.x1;
+    if (x1 > cl.x2) x1 = cl.x2;
+    if (y0 < cl.y1) y0 = cl.y1;
+    if (y1 > cl.y2) y1 = cl.y2;
+
+    for (int y = y0; y <= y1; y++) {
+        float t = clampf(((float)y - ry) / (rh + 0.001f), 0.0f, 1.0f);
+        Color rowCol = lerp_color(topCol, botCol, t);
+        float qy = fabsf((float)y - cy) - hy;
+        for (int x = x0; x <= x1; x++) {
+            float qx = fabsf((float)x - cx) - hx;
+            float ax = (qx > 0.0f) ? qx : 0.0f;
+            float ay = (qy > 0.0f) ? qy : 0.0f;
+            float outside = sqrtf(ax * ax + ay * ay);
+            float inside = (qx > qy) ? qx : qy;
+            if (inside > 0.0f) inside = 0.0f;
+            float sdf = outside + inside - r;
+            float cov = clampf(0.6f - sdf, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, rowCol, (uint8_t)(alpha * cov));
+            }
+        }
+    }
+}
+
+static void stroke_round_rect_aa(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                                 float rx, float ry, float rw, float rh, float rad,
+                                 float thickness, Color col, uint8_t alpha = 255) {
+    if (rw <= 0.0f || rh <= 0.0f) return;
+    float r = clampf(rad, 0.0f, ((rw < rh ? rw : rh) * 0.5f));
+    float cx = rx + rw * 0.5f;
+    float cy = ry + rh * 0.5f;
+    float hx = rw * 0.5f - r;
+    float hy = rh * 0.5f - r;
+    float halfT = thickness * 0.5f;
+
+    int x0 = (int)floorf(rx - halfT - 1.5f);
+    int x1 = (int)ceilf(rx + rw + halfT + 1.5f);
+    int y0 = (int)floorf(ry - halfT - 1.5f);
+    int y1 = (int)ceilf(ry + rh + halfT + 1.5f);
+    if (x0 < cl.x1) x0 = cl.x1;
+    if (x1 > cl.x2) x1 = cl.x2;
+    if (y0 < cl.y1) y0 = cl.y1;
+    if (y1 > cl.y2) y1 = cl.y2;
+
+    for (int y = y0; y <= y1; y++) {
+        float qy = fabsf((float)y - cy) - hy;
+        for (int x = x0; x <= x1; x++) {
+            float qx = fabsf((float)x - cx) - hx;
+            float ax = (qx > 0.0f) ? qx : 0.0f;
+            float ay = (qy > 0.0f) ? qy : 0.0f;
+            float outside = sqrtf(ax * ax + ay * ay);
+            float inside = (qx > qy) ? qx : qy;
+            if (inside > 0.0f) inside = 0.0f;
+            float sdf = fabsf(outside + inside - r);
+            float cov = clampf(halfT + 0.6f - sdf, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, col, (uint8_t)(alpha * cov));
+            }
+        }
+    }
+}
+
+static void fill_poly_shaded(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                             const Vec2* pts, int count, Color topCol, Color botCol, uint8_t alpha = 255) {
+    if (count < 3) return;
+    float minY = pts[0].y, maxY = pts[0].y;
+    for (int i = 1; i < count; i++) {
+        if (pts[i].y < minY) minY = pts[i].y;
+        if (pts[i].y > maxY) maxY = pts[i].y;
+    }
+    int yStart = (int)ceilf(minY);
+    int yEnd   = (int)floorf(maxY);
+    if (yStart < cl.y1) yStart = cl.y1;
+    if (yEnd   > cl.y2) yEnd   = cl.y2;
+
+    float nodeX[32];
+    float spanY = (maxY - minY > 0.001f) ? (maxY - minY) : 1.0f;
+
+    for (int y = yStart; y <= yEnd; y++) {
+        float fy = (float)y;
+        int nodes = 0;
+        int j = count - 1;
+        for (int i = 0; i < count; i++) {
+            if (((pts[i].y < fy && pts[j].y >= fy) || (pts[j].y < fy && pts[i].y >= fy)) && nodes < 32) {
+                nodeX[nodes++] = pts[i].x + (fy - pts[i].y) / (pts[j].y - pts[i].y) * (pts[j].x - pts[i].x);
+            }
+            j = i;
+        }
+        for (int i = 0; i < nodes - 1; i++) {
+            for (int k = i + 1; k < nodes; k++) {
+                if (nodeX[k] < nodeX[i]) {
+                    float tmp = nodeX[i]; nodeX[i] = nodeX[k]; nodeX[k] = tmp;
+                }
+            }
+        }
+        Color rowCol = lerp_color(topCol, botCol, clampf((fy - minY) / spanY, 0.0f, 1.0f));
+        for (int i = 0; i + 1 < nodes; i += 2) {
+            int xs = (int)ceilf(nodeX[i]);
+            int xe = (int)floorf(nodeX[i + 1]);
+            if (xs < cl.x1) xs = cl.x1;
+            if (xe > cl.x2) xe = cl.x2;
+            if (xs <= xe) {
+                for (int x = xs; x <= xe; x++) {
+                    blend_px(fb, fbW, fbH, cl, x, y, rowCol, alpha);
                 }
             }
         }
     }
 }
 
-static void draw_glow_disc(uint32_t* fb, int fbW, int fbH,
-                           int cx1, int cy1, int cx2, int cy2,
-                           float cx, float cy, float radius, Color col, uint8_t maxAlpha, bool additive = false) {
-    int x0 = (int)floorf(cx - radius);
-    int x1 = (int)ceilf(cx + radius);
-    int y0 = (int)floorf(cy - radius);
-    int y1 = (int)ceilf(cy + radius);
-    if (x0 < cx1) x0 = cx1;
-    if (x1 > cx2) x1 = cx2;
-    if (y0 < cy1) y0 = cy1;
-    if (y1 > cy2) y1 = cy2;
-    float r2 = radius * radius;
-    for (int y = y0; y <= y1; y++) {
-        float dy = (float)y - cy;
-        for (int x = x0; x <= x1; x++) {
-            float dx = (float)x - cx;
-            float d2 = dx * dx + dy * dy;
-            if (d2 >= r2) continue;
-            float k = 1.0f - sqrtf(d2) / radius;
-            uint8_t a = (uint8_t)(k * k * maxAlpha);
-            if (additive) add_pixel_fb(fb, fbW, fbH, x, y, col, a);
-            else blend_pixel_fb(fb, fbW, fbH, x, y, col, a);
-        }
-    }
-}
+static void fill_ellipse_shaded(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                                float cx, float cy, float rx, float ry,
+                                Color topCol, Color botCol, uint8_t alpha = 255) {
+    int x0 = (int)floorf(cx - rx - 1.5f);
+    int x1 = (int)ceilf(cx + rx + 1.5f);
+    int y0 = (int)floorf(cy - ry - 1.5f);
+    int y1 = (int)ceilf(cy + ry + 1.5f);
+    if (x0 < cl.x1) x0 = cl.x1;
+    if (x1 > cl.x2) x1 = cl.x2;
+    if (y0 < cl.y1) y0 = cl.y1;
+    if (y1 > cl.y2) y1 = cl.y2;
 
-static void draw_ellipse_filled(uint32_t* fb, int fbW, int fbH,
-                                int cx1, int cy1, int cx2, int cy2,
-                                float cx, float cy, float rx, float ry, Color col, uint8_t alpha = 255) {
-    int x0 = (int)floorf(cx - rx - 1);
-    int x1 = (int)ceilf(cx + rx + 1);
-    int y0 = (int)floorf(cy - ry - 1);
-    int y1 = (int)ceilf(cy + ry + 1);
-    if (x0 < cx1) x0 = cx1;
-    if (x1 > cx2) x1 = cx2;
-    if (y0 < cy1) y0 = cy1;
-    if (y1 > cy2) y1 = cy2;
-    float invRx2 = 1.0f / (rx * rx + 0.001f);
-    float invRy2 = 1.0f / (ry * ry + 0.001f);
+    float minR = (rx < ry) ? rx : ry;
     for (int y = y0; y <= y1; y++) {
-        float dy = (float)y - cy;
-        float dy2 = dy * dy * invRy2;
+        float dy = ((float)y - cy) / (ry + 0.001f);
+        float t = clampf((dy + 1.0f) * 0.5f, 0.0f, 1.0f);
+        Color rowCol = lerp_color(topCol, botCol, t);
         for (int x = x0; x <= x1; x++) {
-            float dx = (float)x - cx;
-            float val = dx * dx * invRx2 + dy2;
-            if (val <= 1.0f) {
-                float edge = (val > 0.85f) ? ((1.0f - val) / 0.15f) : 1.0f;
-                blend_pixel_fb(fb, fbW, fbH, x, y, col, (uint8_t)(alpha * edge));
+            float dx = ((float)x - cx) / (rx + 0.001f);
+            float e = sqrtf(dx * dx + dy * dy);
+            float cov = clampf((1.0f - e) * minR + 0.5f, 0.0f, 1.0f);
+            if (cov > 0.0f) {
+                blend_px(fb, fbW, fbH, cl, x, y, rowCol, (uint8_t)(alpha * cov));
             }
         }
     }
 }
 
-static void draw_ring_ellipse(uint32_t* fb, int fbW, int fbH,
-                              int cx1, int cy1, int cx2, int cy2,
-                              float cx, float cy, float rx, float ry,
-                              float thickness, Color col, uint8_t alpha, bool additive = false) {
-    float rOuterX = rx + thickness;
-    float rOuterY = ry + thickness;
-    int x0 = (int)floorf(cx - rOuterX - 1);
-    int x1 = (int)ceilf(cx + rOuterX + 1);
-    int y0 = (int)floorf(cy - rOuterY - 1);
-    int y1 = (int)ceilf(cy + rOuterY + 1);
-    if (x0 < cx1) x0 = cx1;
-    if (x1 > cx2) x1 = cx2;
-    if (y0 < cy1) y0 = cy1;
-    if (y1 > cy2) y1 = cy2;
-
-    float invRx = 1.0f / (rx + 0.001f);
-    float invRy = 1.0f / (ry + 0.001f);
-    float halfT = thickness * 0.5f / (rx > 1.0f ? rx : 1.0f);
-    for (int y = y0; y <= y1; y++) {
-        float ny = ((float)y - cy) * invRy;
-        for (int x = x0; x <= x1; x++) {
-            float nx = ((float)x - cx) * invRx;
-            float d = sqrtf(nx * nx + ny * ny);
-            float dist = fabsf(d - 1.0f);
-            if (dist <= halfT) {
-                float w = 1.0f - (dist / (halfT + 0.0001f));
-                uint8_t a = (uint8_t)(alpha * w);
-                if (additive) add_pixel_fb(fb, fbW, fbH, x, y, col, a);
-                else blend_pixel_fb(fb, fbW, fbH, x, y, col, a);
-            }
-        }
-    }
-}
-
-static Color shade_surface(Color baseCol, Vec3 normalWorld, Color rimCol) {
-    // Key directional light from top-left-front
-    Vec3 lightDir = { -0.35f, -0.55f, -0.75f };
-    float ndotl = -(normalWorld.x * lightDir.x + normalWorld.y * lightDir.y + normalWorld.z * lightDir.z);
-    ndotl = clampf(ndotl, 0.0f, 1.0f);
-
-    float rim = clampf(1.0f - fabsf(normalWorld.z), 0.0f, 1.0f);
-    rim = rim * rim * 0.35f;
-
-    float k = 0.42f + ndotl * 0.68f;
-    int r = (int)(baseCol.r * k + rimCol.r * rim);
-    int g = (int)(baseCol.g * k + rimCol.g * rim);
-    int b = (int)(baseCol.b * k + rimCol.b * rim);
-    return Color{ clampu8(r), clampu8(g), clampu8(b) };
-}
-
-static Color compute_lightbar_color(bool isDS5, const AppConfig& cfg, float timeSec, uint8_t batteryPct) {
-    int mode = isDS5 ? cfg.ds_lightbar_mode : cfg.ds4_lightbar_mode;
-    int colorIdx = isDS5 ? cfg.ds_lightbar_color : cfg.ds4_lightbar_color;
-    int brightIdx = isDS5 ? cfg.ds_brightness : cfg.ds4_brightness;
-
-    if (mode == 3) return Color{ 16, 24, 38 };
-
-    float bright = (brightIdx == 0) ? 1.0f : ((brightIdx == 1) ? 0.65f : 0.35f);
-    Color base = { 0, 145, 255 };
-
-    if (mode == 4) {
-        float h = fmodf(timeSec * 0.22f, 1.0f);
-        base = hsv_to_rgb(h, 0.92f, 1.0f);
-    } else if (mode == 2) {
-        if (batteryPct > 60) base = Color{ 16, 220, 140 };
-        else if (batteryPct > 20) base = Color{ 255, 180, 30 };
-        else base = Color{ 255, 55, 65 };
-    } else if (mode == 0) {
-        base = Color{ 0, 150, 255 };
-    } else {
-        static const Color DS5_COLS[6] = {
-            { 0, 112, 209 }, { 255, 34, 51 }, { 0, 230, 118 },
-            { 179, 136, 255 }, { 0, 229, 255 }, { 245, 250, 255 }
-        };
-        static const Color DS4_COLS[7] = {
-            { 0, 112, 220 }, { 239, 68, 68 }, { 16, 185, 129 },
-            { 168, 85, 247 }, { 6, 182, 212 }, { 245, 158, 11 }, { 248, 250, 252 }
-        };
-        if (isDS5) base = DS5_COLS[(colorIdx >= 0 && colorIdx < 6) ? colorIdx : 0];
-        else base = DS4_COLS[(colorIdx >= 0 && colorIdx < 7) ? colorIdx : 0];
-
-        if (mode == 5) {
-            bright *= (0.48f + 0.52f * (0.5f + 0.5f * sinf(timeSec * 3.0f)));
-        }
-    }
-
-    return Color{
-        clampu8((int)(base.r * bright)),
-        clampu8((int)(base.g * bright)),
-        clampu8((int)(base.b * bright))
+// Compute live lightbar color matching PS5 DualSense & PS4 DualShock 4 settings
+static Color compute_lightbar_color(bool isDualSense, const AppConfig& cfg, float timeSec, int battPct) {
+    static const Color dsCols[6] = {
+        { 0, 112, 220 },  // Azul PlayStation
+        { 239, 68, 68 },  // Rojo
+        { 16, 200, 110 }, // Verde
+        { 168, 85, 247 }, // Purpura
+        { 6, 220, 255 },  // Cian
+        { 245, 248, 252 } // Blanco
     };
+    static const Color ds4Cols[7] = {
+        { 0, 112, 220 },  // Azul PS4
+        { 239, 68, 68 },  // Rojo Carmesi
+        { 16, 185, 129 }, // Verde Esmeralda
+        { 168, 85, 247 }, // Purpura Neon
+        { 6, 182, 212 },  // Cian Electrico
+        { 245, 158, 11 }, // Ambar Oro
+        { 248, 250, 252 } // Blanco Puro
+    };
+
+    int mode = isDualSense ? cfg.ds_lightbar_mode : cfg.ds4_lightbar_mode;
+    int colIdx = isDualSense ? cfg.ds_lightbar_color : cfg.ds4_lightbar_color;
+    int br = isDualSense ? cfg.ds_brightness : cfg.ds4_brightness;
+
+    Color base = { 0, 112, 220 };
+    if (isDualSense) {
+        if (colIdx >= 0 && colIdx < 6) base = dsCols[colIdx];
+    } else {
+        if (colIdx >= 0 && colIdx < 7) base = ds4Cols[colIdx];
+    }
+
+    if (mode == 3) {
+        return Color{ 16, 20, 28 }; // Off
+    } else if (mode == 2) {
+        if (battPct <= 20) base = Color{ 239, 50, 50 };
+        else if (battPct <= 55) base = Color{ 245, 175, 20 };
+        else base = Color{ 16, 230, 130 };
+    } else if (mode == 4) {
+        float hue = fmodf(timeSec * 0.28f, 1.0f);
+        base = hsv_to_rgb(hue, 0.92f, 1.0f);
+    } else if (mode == 5) {
+        float pulse = 0.22f + 0.78f * (0.5f + 0.5f * sinf(timeSec * 2.8f));
+        base = Color{
+            clampu8((int)(base.r * pulse)),
+            clampu8((int)(base.g * pulse)),
+            clampu8((int)(base.b * pulse))
+        };
+    }
+
+    float scale = (br == 1) ? 0.65f : ((br == 2) ? 0.35f : 1.0f);
+    return Color{
+        clampu8((int)(base.r * scale)),
+        clampu8((int)(base.g * scale)),
+        clampu8((int)(base.b * scale))
+    };
+}
+
+// Draw clean crisp mini bitmap labels ("L1", "L2", "R1", "R2", "SHARE", "CREATE", "OPTIONS", "PS")
+static void draw_tiny_char(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                           int x, int y, int scale, char ch, Color col, uint8_t alpha = 255) {
+    // 5x7 bitmaps encoded row by row (MSB bit 4 to bit 0)
+    static const uint8_t glyphL[7] = { 0x10,0x10,0x10,0x10,0x10,0x10,0x1F };
+    static const uint8_t glyphR[7] = { 0x1E,0x11,0x11,0x1E,0x14,0x12,0x11 };
+    static const uint8_t glyph1[7] = { 0x04,0x0C,0x04,0x04,0x04,0x04,0x0E };
+    static const uint8_t glyph2[7] = { 0x0E,0x11,0x01,0x06,0x08,0x10,0x1F };
+    static const uint8_t glyph3[7] = { 0x1E,0x01,0x01,0x0E,0x01,0x01,0x1E };
+    static const uint8_t glyphP[7] = { 0x1E,0x11,0x11,0x1E,0x10,0x10,0x10 };
+    static const uint8_t glyphS[7] = { 0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E };
+    static const uint8_t glyphC[7] = { 0x0E,0x11,0x10,0x10,0x10,0x11,0x0E };
+    static const uint8_t glyphO[7] = { 0x0E,0x11,0x11,0x11,0x11,0x11,0x0E };
+    static const uint8_t glyphH[7] = { 0x11,0x11,0x11,0x1F,0x11,0x11,0x11 };
+    static const uint8_t glyphA[7] = { 0x0E,0x11,0x11,0x1F,0x11,0x11,0x11 };
+    static const uint8_t glyphE[7] = { 0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F };
+    static const uint8_t glyphT[7] = { 0x1F,0x04,0x04,0x04,0x04,0x04,0x04 };
+    static const uint8_t glyphN[7] = { 0x11,0x19,0x15,0x13,0x11,0x11,0x11 };
+    static const uint8_t glyphI[7] = { 0x0E,0x04,0x04,0x04,0x04,0x04,0x0E };
+    static const uint8_t glyphM[7] = { 0x11,0x1B,0x15,0x15,0x11,0x11,0x11 };
+    static const uint8_t glyphU[7] = { 0x11,0x11,0x11,0x11,0x11,0x11,0x0E };
+    static const uint8_t glyphDash[7] = { 0x00,0x00,0x00,0x1F,0x00,0x00,0x00 };
+
+    const uint8_t* rows = NULL;
+    switch (ch) {
+        case 'L': rows = glyphL; break;
+        case 'R': rows = glyphR; break;
+        case '1': rows = glyph1; break;
+        case '2': rows = glyph2; break;
+        case '3': rows = glyph3; break;
+        case 'P': rows = glyphP; break;
+        case 'S': rows = glyphS; break;
+        case 'C': rows = glyphC; break;
+        case 'O': rows = glyphO; break;
+        case 'H': rows = glyphH; break;
+        case 'A': rows = glyphA; break;
+        case 'E': rows = glyphE; break;
+        case 'T': rows = glyphT; break;
+        case 'N': rows = glyphN; break;
+        case 'I': rows = glyphI; break;
+        case 'M': rows = glyphM; break;
+        case 'U': rows = glyphU; break;
+        case '-': rows = glyphDash; break;
+        default: return;
+    }
+
+    for (int ry = 0; ry < 7; ry++) {
+        uint8_t bits = rows[ry];
+        for (int rx = 0; rx < 5; rx++) {
+            if (bits & (1 << (4 - rx))) {
+                for (int sy = 0; sy < scale; sy++) {
+                    for (int sx = 0; sx < scale; sx++) {
+                        blend_px(fb, fbW, fbH, cl, x + rx * scale + sx, y + ry * scale + sy, col, alpha);
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void draw_tiny_text(uint32_t* fb, int fbW, int fbH, const ClipRect& cl,
+                           int cx, int cy, int scale, const char* txt, Color col, uint8_t alpha = 255) {
+    if (!txt) return;
+    int len = (int)strlen(txt);
+    int charW = 5 * scale;
+    int gap = scale;
+    int totalW = len * charW + (len > 0 ? (len - 1) * gap : 0);
+    int startX = cx - totalW / 2;
+    int startY = cy - (7 * scale) / 2;
+    for (int i = 0; i < len; i++) {
+        if (txt[i] != ' ') {
+            draw_tiny_char(fb, fbW, fbH, cl, startX + i * (charW + gap), startY, scale, txt[i], col, alpha);
+        }
+    }
 }
 
 } // namespace
@@ -373,10 +552,10 @@ Controller3DRenderer::Controller3DRenderer() : m_time(0.0f), m_prevButtons(0) {
     memset(m_pulse, 0, sizeof(m_pulse));
 }
 
-void Controller3DRenderer::update(float dt, uint32_t buttons, int /*rumblePhase*/) {
+void Controller3DRenderer::update(float dt, uint32_t buttons, int rumblePhase) {
     m_time += dt;
 
-    static const uint32_t TRACKED_BITS[18] = {
+    static const uint32_t btnMasks[18] = {
         ORBIS_PAD_BUTTON_CROSS,
         ORBIS_PAD_BUTTON_CIRCLE,
         ORBIS_PAD_BUTTON_SQUARE,
@@ -391,463 +570,710 @@ void Controller3DRenderer::update(float dt, uint32_t buttons, int /*rumblePhase*
         ORBIS_PAD_BUTTON_R2,
         ORBIS_PAD_BUTTON_L3,
         ORBIS_PAD_BUTTON_R3,
-        0x00000001U,               // Share / Create
-        ORBIS_PAD_BUTTON_OPTIONS,
-        0x00010000U,               // PS Button
+        0x00000001U,              // Share / Create
+        ORBIS_PAD_BUTTON_OPTIONS, // Options
+        0x00010000U,              // PS Button
         ORBIS_PAD_BUTTON_TOUCH_PAD
     };
 
-    uint32_t rising = buttons & ~m_prevButtons;
+    uint32_t just = buttons & ~m_prevButtons;
     m_prevButtons = buttons;
 
     for (int i = 0; i < 18; i++) {
-        if (rising & TRACKED_BITS[i]) {
+        if (just & btnMasks[i]) {
             m_pulse[i] = 1.0f;
         } else if (m_pulse[i] > 0.0f) {
-            m_pulse[i] -= dt * 2.4f;
+            m_pulse[i] -= dt * 2.8f;
             if (m_pulse[i] < 0.0f) m_pulse[i] = 0.0f;
         }
     }
+    (void)rumblePhase;
 }
 
 void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh,
                                   bool isDualSense, const AppConfig& cfg,
-                                  const OrbisPadData& padData, int rumblePhase) {
+                                  const OrbisPadData& padData, int rumblePhase,
+                                  int playerSlot) {
     if (!scene) return;
     uint32_t* fb = scene->GetActiveFrameBuffer();
     if (!fb) return;
+
     int fbW = scene->GetWidth();
     int fbH = scene->GetHeight();
+    ClipRect cl = {
+        vx < 0 ? 0 : vx,
+        vy < 0 ? 0 : vy,
+        (vx + vw - 1 >= fbW) ? (fbW - 1) : (vx + vw - 1),
+        (vy + vh - 1 >= fbH) ? (fbH - 1) : (vy + vh - 1)
+    };
 
-    int cx1 = vx < 0 ? 0 : vx;
-    int cy1 = vy < 0 ? 0 : vy;
-    int cx2 = (vx + vw - 1) >= fbW ? (fbW - 1) : (vx + vw - 1);
-    int cy2 = (vy + vh - 1) >= fbH ? (fbH - 1) : (vy + vh - 1);
-    if (cx1 >= cx2 || cy1 >= cy2) return;
-
-    // 1. Dynamic Lightbar Color & Ambient Pedestal Studio Glow
-    Color lbColor = compute_lightbar_color(isDualSense, cfg, m_time, 85);
-    float centerX = vx + vw * 0.5f;
-    float centerY = vy + vh * 0.50f;
-
-    // Pedestal studio glow & holographic orbit rings under controller
-    draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                   centerX, centerY + 115.0f, 220.0f, lbColor, 58, true);
-    draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                      centerX, centerY + 128.0f, 225.0f, 52.0f, 2.5f, lbColor, 95, true);
-    draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                      centerX, centerY + 128.0f, 165.0f, 36.0f, 1.5f, Color{ 56, 189, 248 }, 65, true);
-
-    // 2. Smooth 3D Idle Orbital Float + Rumble Vibration Shake
-    float bobY = sinf(m_time * 1.9f) * 0.038f;
-    float rumbleX = 0.0f, rumbleY = 0.0f, rumbleRoll = 0.0f;
-    if (rumblePhase > 0) {
-        float freq = (rumblePhase == 2) ? 46.0f : 28.0f;
-        float amp = (rumblePhase == 3) ? 0.030f : 0.020f;
-        rumbleX = sinf(m_time * freq * 1.3f) * amp;
-        rumbleY = cosf(m_time * freq) * amp * 0.8f;
-        rumbleRoll = sinf(m_time * freq * 0.9f) * amp * 1.6f;
+    float cx = vx + vw * 0.5f;
+    // Slight haptic vibration shake if active
+    float shakeX = 0.0f, shakeY = 0.0f;
+    if (rumblePhase != 0) {
+        float amp = (rumblePhase == 3) ? 3.5f : 2.3f;
+        shakeX = sinf(m_time * 58.0f) * amp;
+        shakeY = cosf(m_time * 47.0f) * amp * 0.7f;
     }
+    cx += shakeX;
 
-    Xform3D xf;
-    xf.yaw = sinf(m_time * 0.85f) * 0.24f;
-    xf.pitch = 0.44f + sinf(m_time * 1.15f) * 0.055f;
-    xf.roll = cosf(m_time * 0.70f) * 0.045f + rumbleRoll;
-    xf.ox = rumbleX;
-    xf.oy = bobY + rumbleY;
-    xf.oz = 0.0f;
-    xf.cx = centerX;
-    xf.cy = centerY - 6.0f;
-    xf.scale = (float)vw * 0.265f;
-    xf.fov = 5.4f;
+    // Live inputs
+    uint32_t b = padData.buttons;
+    bool bCross    = (b & ORBIS_PAD_BUTTON_CROSS) != 0;
+    bool bCircle   = (b & ORBIS_PAD_BUTTON_CIRCLE) != 0;
+    bool bSquare   = (b & ORBIS_PAD_BUTTON_SQUARE) != 0;
+    bool bTriangle = (b & ORBIS_PAD_BUTTON_TRIANGLE) != 0;
+    bool bUp       = (b & ORBIS_PAD_BUTTON_UP) != 0;
+    bool bDown     = (b & ORBIS_PAD_BUTTON_DOWN) != 0;
+    bool bLeft     = (b & ORBIS_PAD_BUTTON_LEFT) != 0;
+    bool bRight    = (b & ORBIS_PAD_BUTTON_RIGHT) != 0;
+    bool bL1       = (b & ORBIS_PAD_BUTTON_L1) != 0;
+    bool bR1       = (b & ORBIS_PAD_BUTTON_R1) != 0;
+    bool bL2       = (b & ORBIS_PAD_BUTTON_L2) != 0;
+    bool bR2       = (b & ORBIS_PAD_BUTTON_R2) != 0;
+    bool bL3       = (b & ORBIS_PAD_BUTTON_L3) != 0;
+    bool bR3       = (b & ORBIS_PAD_BUTTON_R3) != 0;
+    bool bShare    = (b & 0x00000001U) != 0;
+    bool bOptions  = (b & ORBIS_PAD_BUTTON_OPTIONS) != 0;
+    bool bPs       = (b & 0x00010000U) != 0;
+    bool bTpClick  = (b & ORBIS_PAD_BUTTON_TOUCH_PAD) != 0;
 
-    // Ground soft shadow ellipse below floating controller
-    draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                        centerX + rumbleX * 60.0f, centerY + 126.0f,
-                        195.0f - bobY * 140.0f, 36.0f - bobY * 35.0f,
-                        Color{ 3, 6, 14 }, 165);
+    float l2Frac = clampf((float)padData.analogButtons.l2 / 255.0f, 0.0f, 1.0f);
+    float r2Frac = clampf((float)padData.analogButtons.r2 / 255.0f, 0.0f, 1.0f);
+    Color lightCol = compute_lightbar_color(isDualSense, cfg, m_time, 100);
 
     // =========================================================================
-    // 3. 3D CHASSIS SILHOUETTE EXTRUSION (16-POINT ERGONOMIC OUTLINE + GRIPS)
+    // 1. TOP DEDICATED SHOULDER TELEMETRY STRIP (L2 / L1 + R1 / R2)
     // =========================================================================
-    // Coordinates in controller local space: X in [-1.55..1.55], Y in [-0.88..1.05] (down=+Y)
-    static const Vec2 DS5_OUTLINE[16] = {
-        { -0.78f, -0.70f }, {  0.78f, -0.70f },
-        {  1.15f, -0.60f }, {  1.42f, -0.34f },
-        {  1.52f,  0.04f }, {  1.48f,  0.54f },
-        {  1.32f,  0.96f }, {  1.06f,  1.02f },
-        {  0.84f,  0.82f }, {  0.58f,  0.46f },
-        { -0.58f,  0.46f }, { -0.84f,  0.82f },
-        { -1.06f,  1.02f }, { -1.32f,  0.96f },
-        { -1.48f,  0.54f }, { -1.52f,  0.04f },
-    };
-    static const Vec2 DS5_LEFT_SHOULDER = { -1.42f, -0.34f };
-    static const Vec2 DS5_TOP_LEFT_BRIDGE = { -1.15f, -0.60f };
+    float shoulderY = vy + 10.0f;
+    float shoulderH = 62.0f;
+    float shoulderW = clampf(vw - 36.0f, 440.0f, 680.0f);
+    float shoulderX = cx - shoulderW * 0.5f;
 
-    // Use uniform 18-point closed contour for smooth 3D extrusion
-    Vec2 contour[18] = {
-        DS5_OUTLINE[0], DS5_OUTLINE[1], DS5_OUTLINE[2], DS5_OUTLINE[3],
-        DS5_OUTLINE[4], DS5_OUTLINE[5], DS5_OUTLINE[6], DS5_OUTLINE[7],
-        DS5_OUTLINE[8], DS5_OUTLINE[9], DS5_OUTLINE[10], DS5_OUTLINE[11],
-        DS5_OUTLINE[12], DS5_OUTLINE[13], DS5_OUTLINE[14], DS5_OUTLINE[15],
-        DS5_LEFT_SHOULDER, DS5_TOP_LEFT_BRIDGE
-    };
+    draw_round_rect_aa(fb, fbW, fbH, cl, shoulderX, shoulderY, shoulderW, shoulderH, 10.0f,
+                       Color{ 11, 20, 36 }, Color{ 8, 14, 26 }, 230);
+    stroke_round_rect_aa(fb, fbW, fbH, cl, shoulderX, shoulderY, shoulderW, shoulderH, 10.0f,
+                         1.2f, Color{ 34, 52, 82 }, 220);
 
-    if (!isDualSense) {
-        // DualShock 4 slightly slimmer rounded silhouette
-        for (int i = 0; i < 18; i++) {
-            contour[i].x *= 0.96f;
-            contour[i].y *= 0.93f;
+    // Left shoulder L2 (analog trigger) + L1 (bumper)
+    {
+        float l2X = shoulderX + 18.0f;
+        float l2W = 132.0f;
+        float barY = shoulderY + 11.0f;
+        float barH = 40.0f;
+        bool actL2 = bL2 || l2Frac > 0.05f;
+        draw_round_rect_aa(fb, fbW, fbH, cl, l2X, barY, l2W, barH, 8.0f,
+                           Color{ 18, 28, 44 }, Color{ 12, 18, 30 }, 255);
+        if (l2Frac > 0.01f) {
+            Color fillCol = actL2 ? Color{ 0, 210, 255 } : Color{ 20, 110, 190 };
+            draw_round_rect_aa(fb, fbW, fbH, cl, l2X + 3.0f, barY + 3.0f, (l2W - 6.0f) * l2Frac, barH - 6.0f, 5.0f,
+                               fillCol, lerp_color(fillCol, Color{ 10, 70, 140 }, 0.4f), 255);
+        }
+        stroke_round_rect_aa(fb, fbW, fbH, cl, l2X, barY, l2W, barH, 8.0f,
+                             actL2 ? 2.2f : 1.3f, actL2 ? Color{ 40, 235, 255 } : Color{ 56, 78, 112 }, 255);
+        draw_tiny_text(fb, fbW, fbH, cl, (int)(l2X + l2W * 0.5f), (int)(barY + barH * 0.5f), 2, "L2",
+                       actL2 ? Color{ 255, 255, 255 } : Color{ 195, 210, 230 }, 255);
+
+        float l1X = l2X + l2W + 12.0f;
+        float l1W = 92.0f;
+        draw_round_rect_aa(fb, fbW, fbH, cl, l1X, barY + 4.0f, l1W, barH - 8.0f, 7.0f,
+                           bL1 ? Color{ 0, 185, 255 } : Color{ 22, 34, 54 },
+                           bL1 ? Color{ 0, 120, 215 } : Color{ 15, 24, 38 }, 255);
+        stroke_round_rect_aa(fb, fbW, fbH, cl, l1X, barY + 4.0f, l1W, barH - 8.0f, 7.0f,
+                             bL1 ? 2.2f : 1.3f, bL1 ? Color{ 130, 245, 255 } : Color{ 62, 84, 118 }, 255);
+        draw_tiny_text(fb, fbW, fbH, cl, (int)(l1X + l1W * 0.5f), (int)(barY + barH * 0.5f), 2, "L1",
+                       bL1 ? Color{ 255, 255, 255 } : Color{ 195, 210, 230 }, 255);
+        if (m_pulse[8] > 0.02f) {
+            stroke_round_rect_aa(fb, fbW, fbH, cl, l1X - 4.0f * (1.0f - m_pulse[8]), barY,
+                                 l1W + 8.0f * (1.0f - m_pulse[8]), barH, 8.0f, 2.0f,
+                                 Color{ 0, 240, 255 }, (uint8_t)(200 * m_pulse[8]));
         }
     }
 
-    const float Z_FRONT = -0.16f;
-    const float Z_BACK  =  0.22f;
-
-    ProjVert pFront[18], pBack[18];
-    for (int i = 0; i < 18; i++) {
-        pFront[i] = xf.project(Vec3{ contour[i].x, contour[i].y, Z_FRONT });
-        pBack[i]  = xf.project(Vec3{ contour[i].x, contour[i].y, Z_BACK });
-    }
-
-    Color shellFront = isDualSense ? Color{ 226, 234, 246 } : Color{ 30, 38, 52 };
-    Color shellSide  = isDualSense ? Color{ 108, 122, 146 } : Color{ 16, 22, 34 };
-    Color gripCore   = isDualSense ? Color{ 18, 24, 36 }    : Color{ 20, 26, 38 };
-
-    // Back shoulders: L2 / R2 pivoting analog triggers & L1 / R1 bumpers (behind main shell)
-    uint32_t btns = padData.buttons;
-    float l2Frac = (float)padData.analogButtons.l2 / 255.0f;
-    float r2Frac = (float)padData.analogButtons.r2 / 255.0f;
-    bool bL1 = (btns & ORBIS_PAD_BUTTON_L1) != 0;
-    bool bR1 = (btns & ORBIS_PAD_BUTTON_R1) != 0;
-    bool bL2 = (btns & ORBIS_PAD_BUTTON_L2) != 0 || l2Frac > 0.1f;
-    bool bR2 = (btns & ORBIS_PAD_BUTTON_R2) != 0 || r2Frac > 0.1f;
-
-    auto draw_shoulder_assembly = [&](bool isLeft, bool bumperPressed, float trigFrac, bool trigActive, float pulseB, float pulseT) {
-        float sx = isLeft ? -1.02f : 1.02f;
-        float w = 0.25f;
-
-        // L2/R2 Trigger block (rotates downward / inward smoothly with analog pressure)
-        float tzShift = trigFrac * 0.08f;
-        float tyShift = trigFrac * 0.06f;
-        Vec3 t0{ sx - w, -0.78f + tyShift, Z_FRONT + 0.04f + tzShift };
-        Vec3 t1{ sx + w, -0.78f + tyShift, Z_FRONT + 0.04f + tzShift };
-        Vec3 t2{ sx + w * 0.92f, -0.68f + tyShift, Z_BACK + 0.02f };
-        Vec3 t3{ sx - w * 0.92f, -0.68f + tyShift, Z_BACK + 0.02f };
-        ProjVert pt0 = xf.project(t0), pt1 = xf.project(t1), pt2 = xf.project(t2), pt3 = xf.project(t3);
-        Color tCol = trigActive ? lerp_color(Color{ 0, 210, 255 }, Color{ 255, 165, 30 }, trigFrac) : Color{ 26, 34, 48 };
-        fill_quad(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                  Vec2{ pt0.sx, pt0.sy }, Vec2{ pt1.sx, pt1.sy }, Vec2{ pt2.sx, pt2.sy }, Vec2{ pt3.sx, pt3.sy }, tCol);
-        if (trigActive || pulseT > 0.0f) {
-            float glowCx = (pt0.sx + pt1.sx) * 0.5f;
-            float glowCy = (pt0.sy + pt2.sy) * 0.5f;
-            draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, glowCx, glowCy, 36.0f + trigFrac * 18.0f, tCol, (uint8_t)(85 + trigFrac * 110), true);
-            if (pulseT > 0.0f) {
-                draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, glowCx, glowCy,
-                                  24.0f + (1.0f - pulseT) * 32.0f, 14.0f + (1.0f - pulseT) * 18.0f,
-                                  2.5f, tCol, (uint8_t)(pulseT * 210), true);
-            }
+    // Right shoulder R1 (bumper) + R2 (analog trigger)
+    {
+        float r2W = 132.0f;
+        float r2X = shoulderX + shoulderW - 18.0f - r2W;
+        float barY = shoulderY + 11.0f;
+        float barH = 40.0f;
+        bool actR2 = bR2 || r2Frac > 0.05f;
+        draw_round_rect_aa(fb, fbW, fbH, cl, r2X, barY, r2W, barH, 8.0f,
+                           Color{ 18, 28, 44 }, Color{ 12, 18, 30 }, 255);
+        if (r2Frac > 0.01f) {
+            float fw = (r2W - 6.0f) * r2Frac;
+            Color fillCol = actR2 ? Color{ 0, 210, 255 } : Color{ 20, 110, 190 };
+            draw_round_rect_aa(fb, fbW, fbH, cl, r2X + r2W - 3.0f - fw, barY + 3.0f, fw, barH - 6.0f, 5.0f,
+                               fillCol, lerp_color(fillCol, Color{ 10, 70, 140 }, 0.4f), 255);
         }
+        stroke_round_rect_aa(fb, fbW, fbH, cl, r2X, barY, r2W, barH, 8.0f,
+                             actR2 ? 2.2f : 1.3f, actR2 ? Color{ 40, 235, 255 } : Color{ 56, 78, 112 }, 255);
+        draw_tiny_text(fb, fbW, fbH, cl, (int)(r2X + r2W * 0.5f), (int)(barY + barH * 0.5f), 2, "R2",
+                       actR2 ? Color{ 255, 255, 255 } : Color{ 195, 210, 230 }, 255);
 
-        // L1/R1 Bumper bar (depresses slightly inward)
-        float bDrop = bumperPressed ? 0.04f : 0.0f;
-        Vec3 b0{ sx - w * 1.05f, -0.71f + bDrop, Z_FRONT - 0.01f };
-        Vec3 b1{ sx + w * 1.05f, -0.71f + bDrop, Z_FRONT - 0.01f };
-        Vec3 b2{ sx + w * 1.02f, -0.61f + bDrop, Z_FRONT + 0.06f };
-        Vec3 b3{ sx - w * 1.02f, -0.61f + bDrop, Z_FRONT + 0.06f };
-        ProjVert pb0 = xf.project(b0), pb1 = xf.project(b1), pb2 = xf.project(b2), pb3 = xf.project(b3);
-        Color bCol = bumperPressed ? Color{ 0, 235, 255 } : Color{ 44, 55, 74 };
-        fill_quad(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                  Vec2{ pb0.sx, pb0.sy }, Vec2{ pb1.sx, pb1.sy }, Vec2{ pb2.sx, pb2.sy }, Vec2{ pb3.sx, pb3.sy }, bCol);
-        if (bumperPressed || pulseB > 0.0f) {
-            float gx = (pb0.sx + pb1.sx) * 0.5f;
-            float gy = (pb0.sy + pb2.sy) * 0.5f;
-            if (bumperPressed) draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, gx, gy, 34.0f, Color{ 0, 235, 255 }, 165, true);
-            if (pulseB > 0.0f) {
-                draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, gx, gy,
-                                  22.0f + (1.0f - pulseB) * 30.0f, 12.0f + (1.0f - pulseB) * 16.0f,
-                                  2.5f, Color{ 0, 235, 255 }, (uint8_t)(pulseB * 220), true);
-            }
-        }
-    };
-
-    draw_shoulder_assembly(true, bL1, l2Frac, bL2, m_pulse[8], m_pulse[10]);
-    draw_shoulder_assembly(false, bR1, r2Frac, bR2, m_pulse[9], m_pulse[11]);
-
-    // Draw side extrusion walls (only back-facing/visible edges based on winding/depth)
-    for (int i = 0; i < 18; i++) {
-        int j = (i + 1) % 18;
-        float avgZ = (pFront[i].depth + pBack[i].depth + pFront[j].depth + pBack[j].depth) * 0.25f;
-        Vec2 edge{ contour[j].x - contour[i].x, contour[j].y - contour[i].y };
-        float len = sqrtf(edge.x * edge.x + edge.y * edge.y);
-        Vec3 nLocal{ edge.y / (len + 0.001f), -edge.x / (len + 0.001f), 0.15f };
-        Vec3 nWorld = xf.rotate_normal(nLocal);
-        if (nWorld.z < 0.35f || avgZ > -0.35f) {
-            Color wallCol = shade_surface(shellSide, nWorld, lbColor);
-            fill_quad(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                      Vec2{ pFront[i].sx, pFront[i].sy },
-                      Vec2{ pFront[j].sx, pFront[j].sy },
-                      Vec2{ pBack[j].sx,  pBack[j].sy },
-                      Vec2{ pBack[i].sx,  pBack[i].sy }, wallCol);
+        float r1W = 92.0f;
+        float r1X = r2X - 12.0f - r1W;
+        draw_round_rect_aa(fb, fbW, fbH, cl, r1X, barY + 4.0f, r1W, barH - 8.0f, 7.0f,
+                           bR1 ? Color{ 0, 185, 255 } : Color{ 22, 34, 54 },
+                           bR1 ? Color{ 0, 120, 215 } : Color{ 15, 24, 38 }, 255);
+        stroke_round_rect_aa(fb, fbW, fbH, cl, r1X, barY + 4.0f, r1W, barH - 8.0f, 7.0f,
+                             bR1 ? 2.2f : 1.3f, bR1 ? Color{ 130, 245, 255 } : Color{ 62, 84, 118 }, 255);
+        draw_tiny_text(fb, fbW, fbH, cl, (int)(r1X + r1W * 0.5f), (int)(barY + barH * 0.5f), 2, "R1",
+                       bR1 ? Color{ 255, 255, 255 } : Color{ 195, 210, 230 }, 255);
+        if (m_pulse[9] > 0.02f) {
+            stroke_round_rect_aa(fb, fbW, fbH, cl, r1X - 4.0f * (1.0f - m_pulse[9]), barY,
+                                 r1W + 8.0f * (1.0f - m_pulse[9]), barH, 8.0f, 2.0f,
+                                 Color{ 0, 240, 255 }, (uint8_t)(200 * m_pulse[9]));
         }
     }
 
-    // DualSense Rumble Motor Grip Glow (when rumblePhase > 0)
-    if (rumblePhase == 1 || rumblePhase == 3) {
-        ProjVert lg = xf.project(Vec3{ -1.24f, 0.72f, 0.02f });
-        draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, lg.sx, lg.sy, 68.0f, Color{ 0, 230, 255 }, 130, true);
-    }
-    if (rumblePhase == 2 || rumblePhase == 3) {
-        ProjVert rg = xf.project(Vec3{ 1.24f, 0.72f, 0.02f });
-        draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, rg.sx, rg.sy, 68.0f, Color{ 56, 189, 248 }, 130, true);
-    }
-
-    // Draw Shaded Front Chassis Face
-    Vec3 frontNormal = xf.rotate_normal(Vec3{ 0.0f, -0.15f, -1.0f });
-    Color shadedFront = shade_surface(shellFront, frontNormal, lbColor);
-    ProjVert pCenter = xf.project(Vec3{ 0.0f, -0.05f, Z_FRONT });
-    for (int i = 0; i < 18; i++) {
-        int j = (i + 1) % 18;
-        fill_triangle(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                      Vec2{ pCenter.sx, pCenter.sy },
-                      Vec2{ pFront[i].sx, pFront[i].sy },
-                      Vec2{ pFront[j].sx, pFront[j].sy }, shadedFront);
+    // Center USB-C Port & Active Lightbar Preview chip in Shoulder Strip
+    {
+        float usbW = 36.0f, usbH = 12.0f;
+        draw_round_rect_aa(fb, fbW, fbH, cl, cx - usbW * 0.5f, shoulderY + 14.0f, usbW, usbH, 6.0f,
+                           Color{ 20, 28, 42 }, Color{ 10, 14, 22 }, 255);
+        stroke_round_rect_aa(fb, fbW, fbH, cl, cx - usbW * 0.5f, shoulderY + 14.0f, usbW, usbH, 6.0f,
+                             1.2f, Color{ 90, 115, 148 }, 255);
+        draw_round_rect_aa(fb, fbW, fbH, cl, cx - 22.0f, shoulderY + 34.0f, 44.0f, 10.0f, 5.0f,
+                           lightCol, lightCol, 255);
+        draw_glow_disc(fb, fbW, fbH, cl, cx, shoulderY + 39.0f, 34.0f, lightCol, 90);
     }
 
-    // Specular rim contour highlight on front face
-    Color rimHighlight = isDualSense ? Color{ 255, 255, 255 } : Color{ 82, 104, 138 };
-    for (int i = 0; i < 18; i++) {
-        int j = (i + 1) % 18;
-        draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                     pFront[i].sx, pFront[i].sy, pFront[j].sx, pFront[j].sy,
-                     2.0f, rimHighlight, 130);
+    // =========================================================================
+    // 2. MAIN ORIGINAL 2D CONTROLLER FRONT VIEW (PS5 DualSense OR PS4 DualShock 4)
+    // =========================================================================
+    float bodyAreaTop = shoulderY + shoulderH + 14.0f;
+    float bodyAreaH = (vy + vh) - bodyAreaTop - 6.0f;
+    float S = clampf(bodyAreaH / 345.0f, 0.72f, 1.32f);
+    if (vw < (int)(560.0f * S)) {
+        S = (float)vw / 560.0f;
     }
+    float cy = bodyAreaTop + bodyAreaH * 0.45f + shakeY;
 
-    // DualSense Black Center Core Trim Wing (or DS4 subtle dark inset bridge)
+    // Ambient backdrop glow under controller matching LED color
+    draw_glow_disc(fb, fbW, fbH, cl, cx, cy - 10.0f * S, 240.0f * S, lightCol, 45);
+
     if (isDualSense) {
-        Vec3 cVerts[6] = {
-            { -0.58f, -0.66f, Z_FRONT - 0.008f },
-            {  0.58f, -0.66f, Z_FRONT - 0.008f },
-            {  0.66f,  0.45f, Z_FRONT - 0.008f },
-            {  0.58f,  0.46f, Z_FRONT - 0.008f },
-            { -0.58f,  0.46f, Z_FRONT - 0.008f },
-            { -0.66f,  0.45f, Z_FRONT - 0.008f }
+        // ---------------------------------------------------------------------
+        // AUTHENTIC PS5 DUALSENSE SILHOUETTE & DETAILS
+        // ---------------------------------------------------------------------
+        Color shellTop   = { 246, 248, 252 };
+        Color shellMid   = { 226, 232, 241 };
+        Color shellBot   = { 196, 205, 220 };
+        Color coreDark   = { 22, 26, 36 };
+        Color coreDark2  = { 14, 17, 25 };
+
+        // Left & Right L1/R1 top shoulder lips visible above the upper horns
+        draw_capsule_shaded(fb, fbW, fbH, cl, cx - 186.0f * S, cy - 102.0f * S, cx - 118.0f * S, cy - 114.0f * S,
+                            24.0f * S, 22.0f * S,
+                            bL1 ? Color{ 0, 190, 255 } : Color{ 38, 44, 58 },
+                            bL1 ? Color{ 0, 120, 220 } : Color{ 20, 24, 34 }, 255);
+        draw_capsule_shaded(fb, fbW, fbH, cl, cx + 118.0f * S, cy - 114.0f * S, cx + 186.0f * S, cy - 102.0f * S,
+                            22.0f * S, 24.0f * S,
+                            bR1 ? Color{ 0, 190, 255 } : Color{ 38, 44, 58 },
+                            bR1 ? Color{ 0, 120, 220 } : Color{ 20, 24, 34 }, 255);
+
+        // DualSense Lower Black Bridge Trim behind white outer wings
+        Vec2 bridgePoly[8] = {
+            { cx - 148.0f * S, cy - 72.0f * S },
+            { cx + 148.0f * S, cy - 72.0f * S },
+            { cx + 138.0f * S, cy + 52.0f * S },
+            { cx + 78.0f * S,  cy + 78.0f * S },
+            { cx,              cy + 82.0f * S },
+            { cx - 78.0f * S,  cy + 78.0f * S },
+            { cx - 138.0f * S, cy + 52.0f * S },
+            { cx - 148.0f * S, cy - 72.0f * S }
         };
-        ProjVert pc[6];
-        for (int i = 0; i < 6; i++) pc[i] = xf.project(cVerts[i]);
-        Color coreShaded = shade_surface(gripCore, frontNormal, lbColor);
-        fill_quad(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-                  Vec2{ pc[0].sx, pc[0].sy }, Vec2{ pc[1].sx, pc[1].sy }, Vec2{ pc[2].sx, pc[2].sy }, Vec2{ pc[5].sx, pc[5].sy }, coreShaded);
-    }
+        fill_poly_shaded(fb, fbW, fbH, cl, bridgePoly, 7, coreDark, coreDark2, 255);
 
-    // =========================================================================
-    // 4. TOUCHPAD + REACTIVE RGB LIGHTBARS + PLAYER LEDS + TOUCH DOTS
-    // =========================================================================
-    bool tpClicked = (btns & ORBIS_PAD_BUTTON_TOUCH_PAD) != 0;
-    float tpDrop = tpClicked ? 0.025f : 0.0f;
-    float tpTopW = isDualSense ? 0.52f : 0.46f;
-    float tpBotW = isDualSense ? 0.45f : 0.46f;
-    float tpTopY = -0.64f;
-    float tpBotY = -0.14f;
+        // Tapered Left & Right DualSense Pearl White Grips
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx - 178.0f * S, cy - 26.0f * S,
+                            cx - 214.0f * S, cy + 128.0f * S,
+                            58.0f * S, 36.0f * S, shellMid, shellBot, 255);
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx + 178.0f * S, cy - 26.0f * S,
+                            cx + 214.0f * S, cy + 128.0f * S,
+                            58.0f * S, 36.0f * S, shellMid, shellBot, 255);
 
-    ProjVert tp0 = xf.project(Vec3{ -tpTopW, tpTopY, Z_FRONT - 0.025f + tpDrop });
-    ProjVert tp1 = xf.project(Vec3{  tpTopW, tpTopY, Z_FRONT - 0.025f + tpDrop });
-    ProjVert tp2 = xf.project(Vec3{  tpBotW, tpBotY, Z_FRONT - 0.025f + tpDrop });
-    ProjVert tp3 = xf.project(Vec3{ -tpBotW, tpBotY, Z_FRONT - 0.025f + tpDrop });
+        // Inner Black Grip Seam Accent along handles (classic DualSense two-tone curve)
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx - 145.0f * S, cy + 12.0f * S,
+                            cx - 178.0f * S, cy + 114.0f * S,
+                            18.0f * S, 11.0f * S, Color{ 24, 29, 40 }, Color{ 16, 20, 28 }, 240);
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx + 145.0f * S, cy + 12.0f * S,
+                            cx + 178.0f * S, cy + 114.0f * S,
+                            18.0f * S, 11.0f * S, Color{ 24, 29, 40 }, Color{ 16, 20, 28 }, 240);
 
-    Color tpColor = tpClicked ? Color{ 0, 225, 190 } : (isDualSense ? Color{ 234, 240, 250 } : Color{ 18, 24, 34 });
-    if (!tpClicked && padData.touch.fingers > 0) tpColor = lerp_color(tpColor, Color{ 0, 195, 255 }, 0.35f);
-    fill_quad(fb, fbW, fbH, cx1, cy1, cx2, cy2,
-              Vec2{ tp0.sx, tp0.sy }, Vec2{ tp1.sx, tp1.sy }, Vec2{ tp2.sx, tp2.sy }, Vec2{ tp3.sx, tp3.sy },
-              shade_surface(tpColor, frontNormal, lbColor));
+        // Left & Right White Wing Shoulders (DPad Wing + Face Button Wing)
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx - 156.0f * S, cy - 42.0f * S, 86.0f * S, 68.0f * S, shellTop, shellMid, 255);
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx + 156.0f * S, cy - 42.0f * S, 86.0f * S, 68.0f * S, shellTop, shellMid, 255);
 
-    // RGB Lightbar Strips
-    if (isDualSense) {
-        draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, tp0.sx - 2, tp0.sy, tp3.sx - 2, tp3.sy, 4.5f, lbColor, 245);
-        draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, tp1.sx + 2, tp1.sy, tp2.sx + 2, tp2.sy, 4.5f, lbColor, 245);
-        draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, (tp0.sx + tp3.sx) * 0.5f, (tp0.sy + tp3.sy) * 0.5f, 34.0f, lbColor, 110, true);
-        draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, (tp1.sx + tp2.sx) * 0.5f, (tp1.sy + tp2.sy) * 0.5f, 34.0f, lbColor, 110, true);
+        // Upper White Center Crown flanking touchpad
+        Vec2 upperShell[6] = {
+            { cx - 155.0f * S, cy - 102.0f * S },
+            { cx + 155.0f * S, cy - 102.0f * S },
+            { cx + 148.0f * S, cy + 12.0f * S },
+            { cx + 96.0f * S,  cy + 40.0f * S },
+            { cx - 96.0f * S,  cy + 40.0f * S },
+            { cx - 148.0f * S, cy + 12.0f * S }
+        };
+        fill_poly_shaded(fb, fbW, fbH, cl, upperShell, 6, shellTop, shellMid, 255);
 
-        // 5 Player White LEDs under Touchpad
-        for (int i = -2; i <= 2; i++) {
-            ProjVert pl = xf.project(Vec3{ i * 0.065f, -0.08f, Z_FRONT - 0.02f });
-            draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, pl.sx, pl.sy, 3.0f, 2.0f, Color{ 225, 248, 255 }, 235);
+        // Matte Black Center U-Plate (frames Touchpad bottom & Analog Sticks like genuine DualSense)
+        Vec2 centerPlate[8] = {
+            { cx - 118.0f * S, cy + 4.0f * S },
+            { cx + 118.0f * S, cy + 4.0f * S },
+            { cx + 128.0f * S, cy + 56.0f * S },
+            { cx + 72.0f * S,  cy + 80.0f * S },
+            { cx - 72.0f * S,  cy + 80.0f * S },
+            { cx - 128.0f * S, cy + 56.0f * S },
+            { cx - 118.0f * S, cy + 4.0f * S }
+        };
+        fill_poly_shaded(fb, fbW, fbH, cl, centerPlate, 6, Color{ 26, 31, 42 }, Color{ 16, 19, 27 }, 255);
+
+        // Analog Stick Circular Wells embedded in U-Plate
+        fill_circle_shaded(fb, fbW, fbH, cl, cx - 74.0f * S, cy + 36.0f * S, 42.0f * S,
+                           Color{ 22, 26, 36 }, Color{ 13, 16, 24 }, 255);
+        fill_circle_shaded(fb, fbW, fbH, cl, cx + 74.0f * S, cy + 36.0f * S, 42.0f * S,
+                           Color{ 22, 26, 36 }, Color{ 13, 16, 24 }, 255);
+
+        // Touchpad Surround (Matte Grey/Black Edge + Glowing Dual V Lightbar Slits)
+        float tpTopW = 196.0f * S;
+        float tpBotW = 166.0f * S;
+        float tpTopY = cy - 102.0f * S;
+        float tpBotY = cy - 8.0f * S;
+
+        // Glow under slanted touchpad lightbar slits
+        for (int sIdx = 0; sIdx < 5; sIdx++) {
+            float frac = (float)sIdx / 4.0f;
+            float gy = tpTopY + (tpBotY - tpTopY) * frac;
+            float gxOff = (tpTopW * 0.5f) * (1.0f - frac) + (tpBotW * 0.5f) * frac + 2.0f * S;
+            draw_glow_disc(fb, fbW, fbH, cl, cx - gxOff, gy, 24.0f * S, lightCol, 85);
+            draw_glow_disc(fb, fbW, fbH, cl, cx + gxOff, gy, 24.0f * S, lightCol, 85);
+        }
+
+        // Actual Pearl-White Touchpad Surface
+        Vec2 tpPoly[4] = {
+            { cx - tpTopW * 0.5f, tpTopY + 2.0f * S },
+            { cx + tpTopW * 0.5f, tpTopY + 2.0f * S },
+            { cx + tpBotW * 0.5f, tpBotY },
+            { cx - tpBotW * 0.5f, tpBotY }
+        };
+        Color tpTop = bTpClick ? Color{ 120, 235, 255 } : Color{ 244, 246, 250 };
+        Color tpBot = bTpClick ? Color{ 40, 170, 235 }  : Color{ 218, 224, 234 };
+        fill_poly_shaded(fb, fbW, fbH, cl, tpPoly, 4, tpTop, tpBot, 255);
+
+        // Dual Slanted RGB Lightbars framing the DualSense Touchpad
+        draw_line_aa(fb, fbW, fbH, cl, cx - tpTopW * 0.5f - 2.0f * S, tpTopY + 3.0f * S,
+                     cx - tpBotW * 0.5f - 2.0f * S, tpBotY - 1.0f * S, 5.2f * S, lightCol, 255);
+        draw_line_aa(fb, fbW, fbH, cl, cx + tpTopW * 0.5f + 2.0f * S, tpTopY + 3.0f * S,
+                     cx + tpBotW * 0.5f + 2.0f * S, tpBotY - 1.0f * S, 5.2f * S, lightCol, 255);
+        // Bottom Touchpad hairline shadow
+        draw_line_aa(fb, fbW, fbH, cl, cx - tpBotW * 0.5f, tpBotY, cx + tpBotW * 0.5f, tpBotY, 2.0f, Color{ 95, 110, 130 }, 200);
+
+        // 5 Crisp White Player Indicator LEDs right below Touchpad center
+        {
+            int slotsToLit = 1;
+            if (cfg.ds_player_leds == 2) slotsToLit = 0;
+            else if (cfg.ds_player_leds == 1) slotsToLit = 5;
+            else slotsToLit = clampf((float)(playerSlot + 1), 1.0f, 4.0f);
+            float ledY = tpBotY - 6.0f * S;
+            for (int li = 0; li < 5; li++) {
+                float lx = cx + (li - 2) * 10.0f * S;
+                bool on = false;
+                if (slotsToLit == 5) on = true;
+                else if (slotsToLit == 1) on = (li == 2);
+                else if (slotsToLit == 2) on = (li == 1 || li == 3);
+                else if (slotsToLit == 3) on = (li == 1 || li == 2 || li == 3);
+                else if (slotsToLit >= 4) on = (li == 0 || li == 1 || li == 3 || li == 4);
+                fill_circle_aa(fb, fbW, fbH, cl, lx, ledY, 2.2f * S,
+                               on ? Color{ 255, 255, 255 } : Color{ 120, 130, 145 }, 255);
+                if (on) draw_glow_disc(fb, fbW, fbH, cl, lx, ledY, 6.0f * S, Color{ 180, 235, 255 }, 140);
+            }
+        }
+
+        // Touchpad Finger Points
+        for (int f = 0; f < 2; f++) {
+            if (f < (int)padData.touch.fingers) {
+                float fx = clampf((float)padData.touch.touch[f].x / 1920.0f, 0.0f, 1.0f);
+                float fy = clampf((float)padData.touch.touch[f].y / 942.0f, 0.0f, 1.0f);
+                float halfW = (tpTopW * (1.0f - fy) + tpBotW * fy) * 0.44f;
+                float px = cx - halfW + fx * (2.0f * halfW);
+                float py = (tpTopY + 10.0f * S) + fy * ((tpBotY - tpTopY) - 18.0f * S);
+                draw_glow_disc(fb, fbW, fbH, cl, px, py, 16.0f * S, Color{ 0, 240, 255 }, 160);
+                fill_circle_aa(fb, fbW, fbH, cl, px, py, 6.0f * S, Color{ 0, 255, 190 }, 255);
+            }
+        }
+
+        // Vertical Create & Options Buttons flanking Touchpad
+        {
+            float crX = cx - tpTopW * 0.5f - 17.0f * S;
+            float opX = cx + tpTopW * 0.5f + 17.0f * S;
+            float btnY0 = cy - 90.0f * S;
+            float btnY1 = cy - 66.0f * S;
+            Color crCol = bShare   ? Color{ 0, 240, 255 } : Color{ 205, 212, 224 };
+            Color opCol = bOptions ? Color{ 0, 240, 255 } : Color{ 205, 212, 224 };
+            draw_capsule_shaded(fb, fbW, fbH, cl, crX, btnY0, crX - 2.0f * S, btnY1, 5.2f * S, 5.2f * S, crCol, Color{ 150, 160, 175 }, 255);
+            draw_capsule_shaded(fb, fbW, fbH, cl, opX, btnY0, opX + 2.0f * S, btnY1, 5.2f * S, 5.2f * S, opCol, Color{ 150, 160, 175 }, 255);
+            if (bShare)   draw_glow_disc(fb, fbW, fbH, cl, crX, (btnY0 + btnY1) * 0.5f, 18.0f * S, Color{ 0, 240, 255 }, 170);
+            if (bOptions) draw_glow_disc(fb, fbW, fbH, cl, opX, (btnY0 + btnY1) * 0.5f, 18.0f * S, Color{ 0, 240, 255 }, 170);
+        }
+
+        // PS Button + Horizontal Mute Pill in Center Black Plate
+        {
+            float psY = cy + 32.0f * S;
+            if (bPs) draw_glow_disc(fb, fbW, fbH, cl, cx, psY, 24.0f * S, Color{ 0, 220, 255 }, 210);
+            fill_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, bPs ? Color{ 0, 210, 255 } : Color{ 44, 52, 68 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, 1.3f, bPs ? Color{ 255, 255, 255 } : Color{ 120, 134, 160 }, 255);
+            draw_tiny_text(fb, fbW, fbH, cl, (int)cx, (int)psY, (S > 0.9f ? 1 : 1), "PS",
+                           bPs ? Color{ 255, 255, 255 } : Color{ 210, 222, 240 }, 255);
+
+            // Mute Pill right under PS button
+            float muteY = cy + 56.0f * S;
+            draw_round_rect_aa(fb, fbW, fbH, cl, cx - 12.0f * S, muteY, 24.0f * S, 6.0f * S, 3.0f * S,
+                               Color{ 245, 165, 35 }, Color{ 210, 125, 15 }, 230);
+        }
+
+        // Left D-Pad Recessed Well + 4 Crisp Directional Keys
+        {
+            float dcx = cx - 156.0f * S;
+            float dcy = cy - 42.0f * S;
+            fill_circle_shaded(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, Color{ 212, 220, 232 }, Color{ 186, 196, 212 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, 1.3f, Color{ 150, 162, 182 }, 220);
+
+            struct DDir { float ox, oy; bool on; int pIdx; };
+            DDir dirs[4] = {
+                { 0.0f, -21.0f * S, bUp, 4 },
+                { 0.0f,  21.0f * S, bDown, 5 },
+                { -21.0f * S, 0.0f, bLeft, 6 },
+                {  21.0f * S, 0.0f, bRight, 7 }
+            };
+            Color dpBaseTop = { 244, 247, 252 };
+            Color dpBaseBot = { 196, 206, 222 };
+            // Cross arms
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy - 31.0f * S, 21.0f * S, 22.0f * S, 5.0f * S,
+                               bUp ? Color{ 0, 225, 255 } : dpBaseTop, bUp ? Color{ 0, 155, 235 } : dpBaseBot, 255);
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy + 9.0f * S, 21.0f * S, 22.0f * S, 5.0f * S,
+                               bDown ? Color{ 0, 225, 255 } : dpBaseTop, bDown ? Color{ 0, 155, 235 } : dpBaseBot, 255);
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 31.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 5.0f * S,
+                               bLeft ? Color{ 0, 225, 255 } : dpBaseTop, bLeft ? Color{ 0, 155, 235 } : dpBaseBot, 255);
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx + 9.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 5.0f * S,
+                               bRight ? Color{ 0, 225, 255 } : dpBaseTop, bRight ? Color{ 0, 155, 235 } : dpBaseBot, 255);
+            fill_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 10.0f * S, Color{ 216, 224, 236 }, 255);
+
+            for (int di = 0; di < 4; di++) {
+                float px = dcx + dirs[di].ox, py = dcy + dirs[di].oy;
+                if (dirs[di].on) draw_glow_disc(fb, fbW, fbH, cl, px, py, 20.0f * S, Color{ 0, 235, 255 }, 185);
+                if (m_pulse[dirs[di].pIdx] > 0.02f) {
+                    stroke_circle_aa(fb, fbW, fbH, cl, px, py, 14.0f * S + (1.0f - m_pulse[dirs[di].pIdx]) * 14.0f * S,
+                                     2.0f, Color{ 0, 245, 255 }, (uint8_t)(210 * m_pulse[dirs[di].pIdx]));
+                }
+            }
+        }
+
+        // Right Face Cluster: Original DualSense Clear/Pearl Jewel Buttons with Colored PlayStation Symbols
+        {
+            float fcx = cx + 156.0f * S;
+            float fcy = cy - 42.0f * S;
+            float off = 29.0f * S;
+            float btnR = 14.5f * S;
+
+            struct FaceSpec { float x, y; bool on; int pIdx; Color symCol; int symType; };
+            FaceSpec faces[4] = {
+                { fcx,       fcy - off, bTriangle, 3, Color{ 45, 225, 160 }, 0 }, // Triangle
+                { fcx + off, fcy,       bCircle,   1, Color{ 255, 75, 95 },  1 }, // Circle
+                { fcx,       fcy + off, bCross,    0, Color{ 70, 175, 255 }, 2 }, // Cross
+                { fcx - off, fcy,       bSquare,   2, Color{ 245, 115, 215 },3 }  // Square
+            };
+            for (int fi = 0; fi < 4; fi++) {
+                FaceSpec& f = faces[fi];
+                if (f.on) {
+                    draw_glow_disc(fb, fbW, fbH, cl, f.x, f.y, btnR * 2.1f, f.symCol, 220);
+                }
+                if (m_pulse[f.pIdx] > 0.02f) {
+                    stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR + (1.0f - m_pulse[f.pIdx]) * 18.0f * S,
+                                     2.4f, f.symCol, (uint8_t)(230 * m_pulse[f.pIdx]));
+                }
+                Color capTop = f.on ? lerp_color(f.symCol, Color{ 255, 255, 255 }, 0.25f) : Color{ 242, 245, 250 };
+                Color capBot = f.on ? f.symCol : Color{ 204, 212, 226 };
+                fill_circle_shaded(fb, fbW, fbH, cl, f.x, f.y, btnR, capTop, capBot, 255);
+                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR, 1.3f,
+                                 f.on ? Color{ 255, 255, 255 } : Color{ 152, 165, 186 }, 255);
+
+                Color glyphCol = f.on ? Color{ 255, 255, 255 } : f.symCol;
+                float gr = btnR * 0.48f;
+                if (f.symType == 0) {
+                    draw_line_aa(fb, fbW, fbH, cl, f.x, f.y - gr, f.x + gr * 0.9f, f.y + gr * 0.72f, 2.2f, glyphCol, 255);
+                    draw_line_aa(fb, fbW, fbH, cl, f.x + gr * 0.9f, f.y + gr * 0.72f, f.x - gr * 0.9f, f.y + gr * 0.72f, 2.2f, glyphCol, 255);
+                    draw_line_aa(fb, fbW, fbH, cl, f.x - gr * 0.9f, f.y + gr * 0.72f, f.x, f.y - gr, 2.2f, glyphCol, 255);
+                } else if (f.symType == 1) {
+                    stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, gr * 0.85f, 2.2f, glyphCol, 255);
+                } else if (f.symType == 2) {
+                    draw_line_aa(fb, fbW, fbH, cl, f.x - gr * 0.72f, f.y - gr * 0.72f, f.x + gr * 0.72f, f.y + gr * 0.72f, 2.3f, glyphCol, 255);
+                    draw_line_aa(fb, fbW, fbH, cl, f.x + gr * 0.72f, f.y - gr * 0.72f, f.x - gr * 0.72f, f.y + gr * 0.72f, 2.3f, glyphCol, 255);
+                } else {
+                    stroke_round_rect_aa(fb, fbW, fbH, cl, f.x - gr * 0.76f, f.y - gr * 0.76f, gr * 1.52f, gr * 1.52f, 1.5f, 2.2f, glyphCol, 255);
+                }
+            }
         }
     } else {
-        // DualShock 4 Front & Slit Lightbar
-        ProjVert lbL = xf.project(Vec3{ -0.42f, -0.68f, Z_FRONT - 0.02f });
-        ProjVert lbR = xf.project(Vec3{  0.42f, -0.68f, Z_FRONT - 0.02f });
-        draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, lbL.sx, lbL.sy, lbR.sx, lbR.sy, 6.0f, lbColor, 250);
-        draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, tp0.sx + 8, tp0.sy + 3, tp1.sx - 8, tp1.sy + 3, 2.5f, lbColor, 220);
-        draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, (lbL.sx + lbR.sx) * 0.5f, (lbL.sy + lbR.sy) * 0.5f, 48.0f, lbColor, 120, true);
-    }
+        // ---------------------------------------------------------------------
+        // AUTHENTIC PS4 DUALSHOCK 4 JET-BLACK SILHOUETTE & DETAILS
+        // ---------------------------------------------------------------------
+        Color bodyTop  = { 44, 50, 64 };
+        Color bodyMid  = { 28, 33, 44 };
+        Color bodyBot  = { 18, 22, 30 };
 
-    // Live Multi-touch fingers mapped straight onto the 3D touchpad plane
-    for (int f = 0; f < (int)padData.touch.fingers && f < 2; f++) {
-        float u = clampf((float)padData.touch.touch[f].x / 1920.0f, 0.0f, 1.0f);
-        float v = clampf((float)padData.touch.touch[f].y / 942.0f, 0.0f, 1.0f);
-        float lx = (-tpTopW + 2.0f * tpTopW * u) * (1.0f - v * 0.1f);
-        float ly = tpTopY + (tpBotY - tpTopY) * v;
-        ProjVert ptDot = xf.project(Vec3{ lx, ly, Z_FRONT - 0.032f + tpDrop });
-        Color fCol = (f == 0) ? Color{ 0, 245, 255 } : Color{ 255, 190, 20 };
-        draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, ptDot.sx, ptDot.sy, 16.0f, fCol, 180, true);
-        draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, ptDot.sx, ptDot.sy, 5.5f, 4.5f, Color{ 255, 255, 255 }, 250);
-    }
-    if (tpClicked || m_pulse[17] > 0.0f) {
-        ProjVert tpc = xf.project(Vec3{ 0.0f, -0.39f, Z_FRONT - 0.035f });
-        if (tpClicked) draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, tpc.sx, tpc.sy, 54.0f, Color{ 0, 255, 195 }, 135, true);
-        if (m_pulse[17] > 0.0f) {
-            draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, tpc.sx, tpc.sy,
-                              44.0f + (1.0f - m_pulse[17]) * 48.0f,
-                              24.0f + (1.0f - m_pulse[17]) * 26.0f,
-                              2.5f, Color{ 0, 255, 195 }, (uint8_t)(m_pulse[17] * 220), true);
+        // Left & Right L1/R1 Bumper Caps above upper horns
+        draw_capsule_shaded(fb, fbW, fbH, cl, cx - 182.0f * S, cy - 104.0f * S, cx - 118.0f * S, cy - 114.0f * S,
+                            23.0f * S, 20.0f * S,
+                            bL1 ? Color{ 0, 195, 255 } : Color{ 56, 64, 82 },
+                            bL1 ? Color{ 0, 125, 215 } : Color{ 26, 31, 42 }, 255);
+        draw_capsule_shaded(fb, fbW, fbH, cl, cx + 118.0f * S, cy - 114.0f * S, cx + 182.0f * S, cy - 104.0f * S,
+                            20.0f * S, 23.0f * S,
+                            bR1 ? Color{ 0, 195, 255 } : Color{ 56, 64, 82 },
+                            bR1 ? Color{ 0, 125, 215 } : Color{ 26, 31, 42 }, 255);
+
+        // DualShock 4 Unibody Tapered Cylindrical Side Grips
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx - 170.0f * S, cy - 28.0f * S,
+                            cx - 208.0f * S, cy + 124.0f * S,
+                            56.0f * S, 35.0f * S, bodyMid, bodyBot, 255);
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx + 170.0f * S, cy - 28.0f * S,
+                            cx + 208.0f * S, cy + 124.0f * S,
+                            56.0f * S, 35.0f * S, bodyMid, bodyBot, 255);
+
+        // Circular Left & Right Button Wells
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx - 152.0f * S, cy - 42.0f * S, 82.0f * S, 66.0f * S, bodyTop, bodyMid, 255);
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx + 152.0f * S, cy - 42.0f * S, 82.0f * S, 66.0f * S, bodyTop, bodyMid, 255);
+
+        // Center DualShock 4 Chassis
+        Vec2 ds4Center[6] = {
+            { cx - 146.0f * S, cy - 102.0f * S },
+            { cx + 146.0f * S, cy - 102.0f * S },
+            { cx + 136.0f * S, cy + 62.0f * S },
+            { cx + 76.0f * S,  cy + 78.0f * S },
+            { cx - 76.0f * S,  cy + 78.0f * S },
+            { cx - 136.0f * S, cy + 62.0f * S }
+        };
+        fill_poly_shaded(fb, fbW, fbH, cl, ds4Center, 6, bodyTop, bodyBot, 255);
+
+        // Glossy Dark Inner Stick Rings (DualShock 4 raised thumbstick bezels)
+        fill_circle_shaded(fb, fbW, fbH, cl, cx - 74.0f * S, cy + 36.0f * S, 42.0f * S, Color{ 38, 44, 56 }, Color{ 20, 24, 34 }, 255);
+        fill_circle_shaded(fb, fbW, fbH, cl, cx + 74.0f * S, cy + 36.0f * S, 42.0f * S, Color{ 38, 44, 56 }, Color{ 20, 24, 34 }, 255);
+
+        // Signature Wide Top Prism Lightbar between shoulders + CUH-ZCT2 Lightbar Slit
+        draw_glow_disc(fb, fbW, fbH, cl, cx, cy - 106.0f * S, 76.0f * S, lightCol, 130);
+        draw_round_rect_aa(fb, fbW, fbH, cl, cx - 84.0f * S, cy - 110.0f * S, 168.0f * S, 11.0f * S, 5.0f * S,
+                           lightCol, lerp_color(lightCol, Color{ 255, 255, 255 }, 0.25f), 255);
+        stroke_round_rect_aa(fb, fbW, fbH, cl, cx - 84.0f * S, cy - 110.0f * S, 168.0f * S, 11.0f * S, 5.0f * S,
+                             1.0f, Color{ 16, 20, 28 }, 200);
+
+        // Rectangular Classic Touchpad with textured dots + top ZCT2 light slit
+        float tpX = cx - 86.0f * S;
+        float tpY = cy - 94.0f * S;
+        float tpW = 172.0f * S;
+        float tpH = 82.0f * S;
+        draw_round_rect_aa(fb, fbW, fbH, cl, tpX, tpY, tpW, tpH, 8.0f * S,
+                           bTpClick ? Color{ 0, 195, 255 } : Color{ 34, 40, 52 },
+                           bTpClick ? Color{ 0, 130, 220 } : Color{ 22, 26, 35 }, 255);
+        stroke_round_rect_aa(fb, fbW, fbH, cl, tpX, tpY, tpW, tpH, 8.0f * S, 1.4f,
+                             bTpClick ? Color{ 130, 245, 255 } : Color{ 62, 72, 92 }, 255);
+        // Thin ZCT2 lightbar strip near top edge of Touchpad
+        draw_round_rect_aa(fb, fbW, fbH, cl, tpX + 10.0f * S, tpY + 6.0f * S, tpW - 20.0f * S, 4.0f * S, 2.0f,
+                           lightCol, lightCol, 220);
+
+        // Touchpad Finger Points
+        for (int f = 0; f < 2; f++) {
+            if (f < (int)padData.touch.fingers) {
+                float fx = clampf((float)padData.touch.touch[f].x / 1920.0f, 0.0f, 1.0f);
+                float fy = clampf((float)padData.touch.touch[f].y / 942.0f, 0.0f, 1.0f);
+                float px = tpX + 10.0f * S + fx * (tpW - 20.0f * S);
+                float py = tpY + 14.0f * S + fy * (tpH - 22.0f * S);
+                draw_glow_disc(fb, fbW, fbH, cl, px, py, 16.0f * S, Color{ 0, 240, 255 }, 170);
+                fill_circle_aa(fb, fbW, fbH, cl, px, py, 6.0f * S, Color{ 0, 255, 190 }, 255);
+            }
+        }
+
+        // Vertical Oval SHARE & OPTIONS Buttons
+        {
+            float shX = tpX - 18.0f * S;
+            float opX = tpX + tpW + 18.0f * S;
+            float btnY0 = cy - 82.0f * S;
+            float btnY1 = cy - 58.0f * S;
+            draw_capsule_shaded(fb, fbW, fbH, cl, shX, btnY0, shX, btnY1, 6.0f * S, 6.0f * S,
+                                bShare ? Color{ 0, 235, 255 } : Color{ 62, 72, 90 }, Color{ 34, 40, 52 }, 255);
+            draw_capsule_shaded(fb, fbW, fbH, cl, opX, btnY0, opX, btnY1, 6.0f * S, 6.0f * S,
+                                bOptions ? Color{ 0, 235, 255 } : Color{ 62, 72, 90 }, Color{ 34, 40, 52 }, 255);
+            if (bShare)   draw_glow_disc(fb, fbW, fbH, cl, shX, (btnY0 + btnY1) * 0.5f, 18.0f * S, Color{ 0, 240, 255 }, 170);
+            if (bOptions) draw_glow_disc(fb, fbW, fbH, cl, opX, (btnY0 + btnY1) * 0.5f, 18.0f * S, Color{ 0, 240, 255 }, 170);
+        }
+
+        // Speaker Grille Dots + Round PlayStation Button
+        for (int row = 0; row < 2; row++) {
+            for (int col = 0; col < 5; col++) {
+                fill_circle_aa(fb, fbW, fbH, cl, cx + (col - 2) * 6.0f * S, cy + (4.0f + row * 6.0f) * S,
+                               1.4f * S, Color{ 10, 12, 18 }, 230);
+            }
+        }
+        {
+            float psY = cy + 36.0f * S;
+            if (bPs) draw_glow_disc(fb, fbW, fbH, cl, cx, psY, 24.0f * S, Color{ 0, 220, 255 }, 210);
+            fill_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, bPs ? Color{ 0, 200, 255 } : Color{ 38, 44, 56 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, 1.3f, bPs ? Color{ 255, 255, 255 } : Color{ 110, 124, 148 }, 255);
+            draw_tiny_text(fb, fbW, fbH, cl, (int)cx, (int)psY, 1, "PS",
+                           bPs ? Color{ 255, 255, 255 } : Color{ 205, 218, 236 }, 255);
+        }
+
+        // Left D-Pad Recessed Circular Well + Dark Glossy Cross Keys
+        {
+            float dcx = cx - 152.0f * S;
+            float dcy = cy - 42.0f * S;
+            fill_circle_shaded(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, Color{ 34, 40, 52 }, Color{ 20, 24, 33 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, 1.2f, Color{ 58, 68, 88 }, 200);
+
+            Color dkTop = { 54, 62, 78 };
+            Color dkBot = { 30, 35, 46 };
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy - 31.0f * S, 21.0f * S, 22.0f * S, 4.5f * S,
+                               bUp ? Color{ 0, 225, 255 } : dkTop, bUp ? Color{ 0, 150, 230 } : dkBot, 255);
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy + 9.0f * S, 21.0f * S, 22.0f * S, 4.5f * S,
+                               bDown ? Color{ 0, 225, 255 } : dkTop, bDown ? Color{ 0, 150, 230 } : dkBot, 255);
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 31.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 4.5f * S,
+                               bLeft ? Color{ 0, 225, 255 } : dkTop, bLeft ? Color{ 0, 150, 230 } : dkBot, 255);
+            draw_round_rect_aa(fb, fbW, fbH, cl, dcx + 9.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 4.5f * S,
+                               bRight ? Color{ 0, 225, 255 } : dkTop, bRight ? Color{ 0, 150, 230 } : dkBot, 255);
+            fill_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 10.0f * S, Color{ 38, 44, 56 }, 255);
+
+            struct DDir { float ox, oy; bool on; int pIdx; };
+            DDir dirs[4] = {
+                { 0.0f, -21.0f * S, bUp, 4 },
+                { 0.0f,  21.0f * S, bDown, 5 },
+                { -21.0f * S, 0.0f, bLeft, 6 },
+                {  21.0f * S, 0.0f, bRight, 7 }
+            };
+            for (int di = 0; di < 4; di++) {
+                float px = dcx + dirs[di].ox, py = dcy + dirs[di].oy;
+                if (dirs[di].on) draw_glow_disc(fb, fbW, fbH, cl, px, py, 20.0f * S, Color{ 0, 235, 255 }, 185);
+                if (m_pulse[dirs[di].pIdx] > 0.02f) {
+                    stroke_circle_aa(fb, fbW, fbH, cl, px, py, 14.0f * S + (1.0f - m_pulse[dirs[di].pIdx]) * 14.0f * S,
+                                     2.0f, Color{ 0, 245, 255 }, (uint8_t)(210 * m_pulse[dirs[di].pIdx]));
+                }
+            }
+        }
+
+        // Right Face Cluster: Original DualShock 4 Glossy Black Caps with Iconic PlayStation Colors
+        {
+            float fcx = cx + 152.0f * S;
+            float fcy = cy - 42.0f * S;
+            float off = 29.0f * S;
+            float btnR = 14.5f * S;
+
+            struct FaceSpec { float x, y; bool on; int pIdx; Color symCol; int symType; };
+            FaceSpec faces[4] = {
+                { fcx,       fcy - off, bTriangle, 3, Color{ 50, 225, 160 }, 0 },
+                { fcx + off, fcy,       bCircle,   1, Color{ 255, 75, 95 },  1 },
+                { fcx,       fcy + off, bCross,    0, Color{ 85, 175, 255 }, 2 },
+                { fcx - off, fcy,       bSquare,   2, Color{ 245, 120, 220 },3 }
+            };
+            for (int fi = 0; fi < 4; fi++) {
+                FaceSpec& f = faces[fi];
+                if (f.on) {
+                    draw_glow_disc(fb, fbW, fbH, cl, f.x, f.y, btnR * 2.1f, f.symCol, 220);
+                }
+                if (m_pulse[f.pIdx] > 0.02f) {
+                    stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR + (1.0f - m_pulse[f.pIdx]) * 18.0f * S,
+                                     2.4f, f.symCol, (uint8_t)(230 * m_pulse[f.pIdx]));
+                }
+                Color capTop = f.on ? lerp_color(f.symCol, Color{ 255, 255, 255 }, 0.25f) : Color{ 44, 52, 68 };
+                Color capBot = f.on ? f.symCol : Color{ 24, 28, 38 };
+                fill_circle_shaded(fb, fbW, fbH, cl, f.x, f.y, btnR, capTop, capBot, 255);
+                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR, 1.3f,
+                                 f.on ? Color{ 255, 255, 255 } : Color{ 78, 90, 112 }, 255);
+
+                Color glyphCol = f.on ? Color{ 255, 255, 255 } : f.symCol;
+                float gr = btnR * 0.48f;
+                if (f.symType == 0) {
+                    draw_line_aa(fb, fbW, fbH, cl, f.x, f.y - gr, f.x + gr * 0.9f, f.y + gr * 0.72f, 2.2f, glyphCol, 255);
+                    draw_line_aa(fb, fbW, fbH, cl, f.x + gr * 0.9f, f.y + gr * 0.72f, f.x - gr * 0.9f, f.y + gr * 0.72f, 2.2f, glyphCol, 255);
+                    draw_line_aa(fb, fbW, fbH, cl, f.x - gr * 0.9f, f.y + gr * 0.72f, f.x, f.y - gr, 2.2f, glyphCol, 255);
+                } else if (f.symType == 1) {
+                    stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, gr * 0.85f, 2.2f, glyphCol, 255);
+                } else if (f.symType == 2) {
+                    draw_line_aa(fb, fbW, fbH, cl, f.x - gr * 0.72f, f.y - gr * 0.72f, f.x + gr * 0.72f, f.y + gr * 0.72f, 2.3f, glyphCol, 255);
+                    draw_line_aa(fb, fbW, fbH, cl, f.x + gr * 0.72f, f.y - gr * 0.72f, f.x - gr * 0.72f, f.y + gr * 0.72f, 2.3f, glyphCol, 255);
+                } else {
+                    stroke_round_rect_aa(fb, fbW, fbH, cl, f.x - gr * 0.76f, f.y - gr * 0.76f, gr * 1.52f, gr * 1.52f, 1.5f, 2.2f, glyphCol, 255);
+                }
+            }
         }
     }
 
     // =========================================================================
-    // 5. D-PAD (CRUCETA 4 DIRECCIONES)
+    // 3. LIVE L3 & R3 ANALOG THUMBSTICKS (Both Models)
     // =========================================================================
-    float dpCX = -0.96f;
-    float dpCY = -0.14f;
-    auto draw_dpad_arm = [&](float dx, float dy, bool pressed, float pulse, int dir) {
-        float drop = pressed ? 0.025f : 0.0f;
-        ProjVert p = xf.project(Vec3{ dpCX + dx, dpCY + dy, Z_FRONT - 0.032f + drop });
-        Color col = pressed ? Color{ 0, 235, 255 } : Color{ 38, 48, 66 };
-        if (pressed) draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 24.0f, Color{ 0, 235, 255 }, 185, true);
-        draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 11.5f, 9.5f, col, 255);
-        draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 11.5f, 9.5f, 1.5f,
-                          pressed ? Color{ 220, 255, 255 } : Color{ 80, 96, 122 }, 200);
-        // Tiny directional arrow tick
-        Color tickCol = pressed ? Color{ 255, 255, 255 } : Color{ 165, 185, 210 };
-        if (dir == 0) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 4, p.sy + 2, p.sx, p.sy - 3, 1.5f, tickCol);
-        if (dir == 0) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 4, p.sy + 2, p.sx, p.sy - 3, 1.5f, tickCol);
-        if (dir == 1) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 4, p.sy - 2, p.sx, p.sy + 3, 1.5f, tickCol);
-        if (dir == 1) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 4, p.sy - 2, p.sx, p.sy + 3, 1.5f, tickCol);
-        if (dir == 2) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 2, p.sy - 4, p.sx - 3, p.sy, 1.5f, tickCol);
-        if (dir == 2) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 2, p.sy + 4, p.sx - 3, p.sy, 1.5f, tickCol);
-        if (dir == 3) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 2, p.sy - 4, p.sx + 3, p.sy, 1.5f, tickCol);
-        if (dir == 3) draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 2, p.sy + 4, p.sx + 3, p.sy, 1.5f, tickCol);
+    {
+        float dzMax = 20.0f * S;
+        float lx = ((float)padData.leftStick.x - 128.0f) / 128.0f;
+        float ly = ((float)padData.leftStick.y - 128.0f) / 128.0f;
+        float rx = ((float)padData.rightStick.x - 128.0f) / 128.0f;
+        float ry = ((float)padData.rightStick.y - 128.0f) / 128.0f;
 
-        if (pulse > 0.0f) {
-            draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy,
-                              12.0f + (1.0f - pulse) * 24.0f, 10.0f + (1.0f - pulse) * 20.0f,
-                              2.5f, Color{ 0, 235, 255 }, (uint8_t)(pulse * 225), true);
+        struct StickSpec { float wx, wy, dx, dy; bool clicked; int pIdx; };
+        StickSpec sticks[2] = {
+            { cx - 74.0f * S, cy + 36.0f * S, lx, ly, bL3, 12 },
+            { cx + 74.0f * S, cy + 36.0f * S, rx, ry, bR3, 13 }
+        };
+
+        for (int si = 0; si < 2; si++) {
+            StickSpec& st = sticks[si];
+            float mag = sqrtf(st.dx * st.dx + st.dy * st.dy);
+            // Recessed stick socket & travel boundary ring
+            fill_circle_aa(fb, fbW, fbH, cl, st.wx, st.wy, 33.0f * S, Color{ 10, 12, 18 }, 240);
+            stroke_circle_aa(fb, fbW, fbH, cl, st.wx, st.wy, 33.0f * S, 1.2f,
+                             (mag > 0.14f || st.clicked) ? Color{ 40, 210, 255 } : Color{ 62, 74, 96 }, 230);
+
+            float capX = st.wx + st.dx * dzMax;
+            float capY = st.wy + st.dy * dzMax;
+
+            // Stick stem & live shadow
+            if (mag > 0.05f) {
+                draw_line_aa(fb, fbW, fbH, cl, st.wx, st.wy, capX, capY, 14.0f * S, Color{ 18, 22, 32 }, 255);
+            }
+            if (st.clicked) {
+                draw_glow_disc(fb, fbW, fbH, cl, capX, capY, 36.0f * S, Color{ 255, 195, 50 }, 220);
+            } else if (mag > 0.15f) {
+                draw_glow_disc(fb, fbW, fbH, cl, capX, capY, 32.0f * S, Color{ 0, 220, 255 }, 140);
+            }
+            if (m_pulse[st.pIdx] > 0.02f) {
+                stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 27.0f * S + (1.0f - m_pulse[st.pIdx]) * 18.0f * S,
+                                 2.2f, Color{ 255, 200, 55 }, (uint8_t)(230 * m_pulse[st.pIdx]));
+            }
+
+            Color capTop = st.clicked ? Color{ 255, 200, 60 } : Color{ 52, 58, 72 };
+            Color capBot = st.clicked ? Color{ 195, 130, 15 } : Color{ 24, 28, 36 };
+            fill_circle_shaded(fb, fbW, fbH, cl, capX, capY, 25.0f * S, capTop, capBot, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 25.0f * S, 1.8f,
+                             st.clicked ? Color{ 255, 245, 180 } : (mag > 0.14f ? Color{ 60, 230, 255 } : Color{ 88, 100, 122 }), 255);
+            // Textured thumb dome inner rim
+            stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 16.5f * S, 1.3f,
+                             st.clicked ? Color{ 255, 245, 180 } : Color{ 70, 78, 94 }, 210);
         }
-    };
-
-    ProjVert dpMid = xf.project(Vec3{ dpCX, dpCY, Z_FRONT - 0.02f });
-    draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, dpMid.sx, dpMid.sy, 32.0f, 26.0f, Color{ 16, 22, 34 }, 215);
-    draw_dpad_arm(0.0f, -0.17f, (btns & ORBIS_PAD_BUTTON_UP) != 0,    m_pulse[4], 0);
-    draw_dpad_arm(0.0f,  0.17f, (btns & ORBIS_PAD_BUTTON_DOWN) != 0,  m_pulse[5], 1);
-    draw_dpad_arm(-0.17f, 0.0f, (btns & ORBIS_PAD_BUTTON_LEFT) != 0,  m_pulse[6], 2);
-    draw_dpad_arm(0.17f,  0.0f, (btns & ORBIS_PAD_BUTTON_RIGHT) != 0, m_pulse[7], 3);
-
-    // =========================================================================
-    // 6. FACE BUTTONS (✕ ○ □ △) WITH AUTHENTIC SYMBOLS & GLOW SHOCKWAVES
-    // =========================================================================
-    float fbCX = 0.96f;
-    float fbCY = -0.14f;
-    auto draw_face_btn = [&](float dx, float dy, bool pressed, float pulse, Color neon, int kind) {
-        float drop = pressed ? 0.028f : 0.0f;
-        ProjVert p = xf.project(Vec3{ fbCX + dx, fbCY + dy, Z_FRONT - 0.036f + drop });
-        if (pressed) {
-            draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 26.0f, neon, 200, true);
-        }
-        Color capCol = pressed ? neon : Color{ 28, 35, 48 };
-        draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 12.5f, 10.5f, capCol, 255);
-        draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 12.5f, 10.5f, 1.5f,
-                          pressed ? Color{ 255, 255, 255 } : neon, pressed ? 240 : 120);
-
-        Color symCol = pressed ? Color{ 255, 255, 255 } : neon;
-        if (kind == 0) { // Cross X
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 5, p.sy - 4, p.sx + 5, p.sy + 4, 1.8f, symCol);
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 5, p.sy - 4, p.sx - 5, p.sy + 4, 1.8f, symCol);
-        } else if (kind == 1) { // Circle O
-            draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 5.5f, 4.6f, 2.0f, symCol, 255);
-        } else if (kind == 2) { // Square []
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 5, p.sy - 4, p.sx + 5, p.sy - 4, 1.8f, symCol);
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 5, p.sy - 4, p.sx + 5, p.sy + 4, 1.8f, symCol);
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 5, p.sy + 4, p.sx - 5, p.sy + 4, 1.8f, symCol);
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 5, p.sy + 4, p.sx - 5, p.sy - 4, 1.8f, symCol);
-        } else { // Triangle /\
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy - 5, p.sx + 5.5f, p.sy + 4, 1.8f, symCol);
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx + 5.5f, p.sy + 4, p.sx - 5.5f, p.sy + 4, 1.8f, symCol);
-            draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx - 5.5f, p.sy + 4, p.sx, p.sy - 5, 1.8f, symCol);
-        }
-
-        if (pulse > 0.0f) {
-            draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy,
-                              13.0f + (1.0f - pulse) * 28.0f, 11.0f + (1.0f - pulse) * 24.0f,
-                              2.5f, neon, (uint8_t)(pulse * 235), true);
-        }
-    };
-
-    draw_face_btn(0.0f,  0.19f, (btns & ORBIS_PAD_BUTTON_CROSS) != 0,    m_pulse[0], Color{ 59, 130, 246 }, 0);
-    draw_face_btn(0.20f, 0.0f,  (btns & ORBIS_PAD_BUTTON_CIRCLE) != 0,   m_pulse[1], Color{ 239, 68, 68 },  1);
-    draw_face_btn(-0.20f,0.0f,  (btns & ORBIS_PAD_BUTTON_SQUARE) != 0,   m_pulse[2], Color{ 236, 72, 153 }, 2);
-    draw_face_btn(0.0f, -0.19f, (btns & ORBIS_PAD_BUTTON_TRIANGLE) != 0, m_pulse[3], Color{ 16, 185, 129 }, 3);
+    }
 
     // =========================================================================
-    // 7. SYSTEM BUTTONS (SHARE/CREATE, OPTIONS, PS BUTTON)
+    // 4. LEFT / RIGHT GRIP HAPTIC RUMBLE WAVES
     // =========================================================================
-    auto draw_sys_pill = [&](float x, float y, bool pressed, float pulse, float r, Color neon) {
-        ProjVert p = xf.project(Vec3{ x, y, Z_FRONT - 0.025f + (pressed ? 0.02f : 0.0f) });
-        if (pressed) draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, 22.0f, neon, 190, true);
-        draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, r, r * 0.72f,
-                            pressed ? neon : (isDualSense ? Color{ 210, 220, 236 } : Color{ 44, 56, 75 }), 255);
-        draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy, r, r * 0.72f, 1.2f, neon, pressed ? 240 : 90);
-        if (pulse > 0.0f) {
-            draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, p.sx, p.sy,
-                              r + (1.0f - pulse) * 22.0f, r * 0.72f + (1.0f - pulse) * 16.0f,
-                              2.0f, neon, (uint8_t)(pulse * 220), true);
+    if (rumblePhase != 0) {
+        float waveP = fmodf(m_time * 3.8f, 1.0f);
+        float wR = 44.0f * S + waveP * 48.0f * S;
+        uint8_t wa = (uint8_t)(220.0f * (1.0f - waveP));
+        if (rumblePhase == 1 || rumblePhase == 3) {
+            stroke_circle_aa(fb, fbW, fbH, cl, cx - 205.0f * S, cy + 95.0f * S, wR, 3.0f, Color{ 0, 255, 175 }, wa);
         }
-    };
-
-    draw_sys_pill(-0.62f, -0.45f, (btns & 0x00000001U) != 0,              m_pulse[14], 7.0f,  Color{ 0, 225, 255 });
-    draw_sys_pill( 0.62f, -0.45f, (btns & ORBIS_PAD_BUTTON_OPTIONS) != 0, m_pulse[15], 7.0f,  Color{ 0, 225, 255 });
-    draw_sys_pill( 0.0f,   0.20f, (btns & 0x00010000U) != 0,              m_pulse[16], 11.5f, Color{ 0, 165, 255 });
-
-    // =========================================================================
-    // 8. 3D TILTING ANALOG THUMBSTICKS (L3 & R3)
-    // =========================================================================
-    auto draw_stick_3d = [&](float bx, float by, uint8_t rawX, uint8_t rawY, bool clicked, float pulse) {
-        float nx = ((float)rawX - 128.0f) / 128.0f;
-        float ny = ((float)rawY - 128.0f) / 128.0f;
-        float mag = clampf(sqrtf(nx * nx + ny * ny), 0.0f, 1.0f);
-
-        // Concave well base & reactive halo ring
-        ProjVert well = xf.project(Vec3{ bx, by, Z_FRONT - 0.015f });
-        Color haloCol = clicked ? Color{ 255, 185, 30 } : Color{ 0, 225, 255 };
-        draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, well.sx, well.sy, 26.0f, 21.0f, Color{ 10, 14, 24 }, 240);
-        draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, well.sx, well.sy, 26.5f, 21.5f, 2.2f,
-                          haloCol, (uint8_t)(70 + (clicked ? 185 : mag * 170)), true);
-
-        // Tilted 3D stick shaft & top concave mushroom cap
-        float tipHeight = clicked ? 0.14f : 0.21f;
-        float tiltX = bx + nx * 0.14f;
-        float tiltY = by + ny * 0.14f;
-        ProjVert cap = xf.project(Vec3{ tiltX, tiltY, Z_FRONT - tipHeight });
-
-        // Stem cylinder shaft
-        draw_line_aa(fb, fbW, fbH, cx1, cy1, cx2, cy2, well.sx, well.sy, cap.sx, cap.sy, 11.0f, Color{ 20, 26, 38 }, 255);
-
-        if (clicked || mag > 0.15f) {
-            draw_glow_disc(fb, fbW, fbH, cx1, cy1, cx2, cy2, cap.sx, cap.sy, 30.0f, haloCol, (uint8_t)(clicked ? 175 : mag * 110), true);
+        if (rumblePhase == 2 || rumblePhase == 3) {
+            stroke_circle_aa(fb, fbW, fbH, cl, cx + 205.0f * S, cy + 95.0f * S, wR, 3.0f, Color{ 0, 210, 255 }, wa);
         }
-
-        Color capCol = clicked ? Color{ 255, 190, 45 } : Color{ 32, 41, 58 };
-        draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, cap.sx, cap.sy, 22.0f, 18.0f, capCol, 255);
-        draw_ellipse_filled(fb, fbW, fbH, cx1, cy1, cx2, cy2, cap.sx, cap.sy, 15.0f, 12.0f, Color{ 17, 23, 34 }, 230);
-        draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, cap.sx, cap.sy, 22.0f, 18.0f, 2.0f,
-                          clicked ? Color{ 255, 240, 180 } : lerp_color(Color{ 85, 100, 125 }, Color{ 0, 235, 255 }, mag), 230);
-
-        if (pulse > 0.0f) {
-            draw_ring_ellipse(fb, fbW, fbH, cx1, cy1, cx2, cy2, cap.sx, cap.sy,
-                              23.0f + (1.0f - pulse) * 32.0f, 19.0f + (1.0f - pulse) * 26.0f,
-                              2.5f, Color{ 255, 190, 45 }, (uint8_t)(pulse * 235), true);
-        }
-    };
-
-    draw_stick_3d(-0.44f, 0.22f, padData.leftStick.x,  padData.leftStick.y,  (btns & ORBIS_PAD_BUTTON_L3) != 0, m_pulse[12]);
-    draw_stick_3d( 0.44f, 0.22f, padData.rightStick.x, padData.rightStick.y, (btns & ORBIS_PAD_BUTTON_R3) != 0, m_pulse[13]);
+    }
 }

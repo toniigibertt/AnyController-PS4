@@ -58,9 +58,12 @@ typedef void (*vpad_rumble_cb_t)(uint8_t large_motor, uint8_t small_motor);
 void vpad_set_rumble_callback(vpad_rumble_cb_t cb);
 void vpad_poll_rumble(void);
 
-// Physical DS4 Management (Auto-Disconnect & Lightbar Control)
+// Physical DS4 Management (Auto-Disconnect & Per-Slot Lightbar Control)
 void vpad_poweroff_physical_ds4(void);
 void vpad_apply_ds4_lightbar(void);
+void vpad_reload_ds4_configs(void);
+bool vpad_has_dynamic_ds4_lightbar(void);
+bool vpad_has_custom_ds4_lightbar(void);
 
 #ifdef __cplusplus
 }

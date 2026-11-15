@@ -1,6 +1,9 @@
 /**
- * OneFamily PS4 - Modelos y Definiciones de Tipos en Español
+ * Controller Control Center PS4 - Modelos y Definiciones de Tipos en Español (v1.5.0)
  */
+
+export type ControllerFamily = 'dualsense' | 'ds4' | 'generic';
+export type Controller2DModel = 'dualsense' | 'ds4';
 
 export interface AppConfig {
   pro_profile_index: number;   // 0 = Personalizado, 1 = eSports FPS, 2 = SimRacing, 3 = Modo Eco, 4 = Estándar PS
@@ -26,7 +29,7 @@ export interface AppConfig {
   ds_speaker_volume: number;   // 0..100 (Predeterminado: 80)
 
   // Opciones Exclusivas DualShock 4 Nativo (PS4)
-  ds4_lightbar_mode: number;   // 0 = Control del Juego, 1 = Color Personalizado, 2 = Nivel de Batería, 3 = Apagado (Ahorro)
+  ds4_lightbar_mode: number;   // 0 = Control del Juego, 1 = Color Personalizado, 2 = Nivel de Batería, 3 = Apagado, 4 = Arcoíris, 5 = Pulso
   ds4_lightbar_color: number;  // 0 = Azul PS4, 1 = Rojo Carmesí, 2 = Verde Esmeralda, 3 = Púrpura Neón, 4 = Cian Eléctrico, 5 = Ámbar Oro, 6 = Blanco Puro
   ds4_brightness: number;      // 0 = Alto (100%), 1 = Medio (50%), 2 = Tenue (15%)
   ds4_rumble_boost: number;    // 0 = Estándar (100%), 1 = Suave (60%), 2 = Intenso (120%), 3 = Desactivado
@@ -35,6 +38,32 @@ export interface AppConfig {
 }
 
 export type TabId = 'settings' | 'dualsense' | 'dualshock4' | 'tester' | 'remap' | 'info';
+
+export interface ConnectedGamepadInfo {
+  slot: number; // 0..3
+  id: string;
+  vid: string;
+  pid: string;
+  family: ControllerFamily;
+  connectionType: 'bluetooth' | 'usb';
+}
+
+export interface ControllerTargetMeta {
+  id: string; // 'global' | 'slot_0' | 'slot_1' | 'slot_2' | 'slot_3'
+  slotIndex?: number;
+  label: string;
+  shortLabel: string;
+  family: ControllerFamily | 'all';
+  ps4Filename: string;
+  ps4FullPath: string;
+  hasCustomConfig: boolean;
+}
+
+export interface ProfileStore {
+  global: AppConfig;
+  targets: Record<string, AppConfig>;
+  macBySlot?: Record<number, string>;
+}
 
 export interface CalibrationState {
   active: boolean;
@@ -110,13 +139,13 @@ export interface LiveGamepadInput {
   connected: boolean;
   id: string;
   slot: number;
-  lx: number;      // -1.0 to 1.0 (or 0..255)
+  lx: number;      // -1.0 to 1.0
   ly: number;
   rx: number;
   ry: number;
   l2: number;      // 0.0 to 1.0
   r2: number;
-  buttons: Record<string, boolean>; // e.g. cross, circle, l1, etc.
+  buttons: Record<string, boolean>;
   rawButtons: boolean[];
   battery?: GamepadBatteryInfo;
 }

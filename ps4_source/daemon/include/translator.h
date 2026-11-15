@@ -64,6 +64,7 @@ void translator_convert(const Xbox360Report* xbox, OrbisPadData* ds4, const Tran
  * @return          Adjusted value with deadzone applied
  */
 uint8_t translator_apply_deadzone(uint8_t value, uint8_t deadzone);
+uint8_t translator_apply_deadzone_curve(uint8_t value, uint8_t deadzone, int curve);
 
 /*
  * Simple wrapper - translate Xbox 360 report to DS4 format using defaults

@@ -37,6 +37,7 @@ static volatile bool g_running = true;
 static void check_vibe_file(void) {
     static uint8_t s_last_lg = 0;
     static uint8_t s_last_sm = 0;
+    static int s_last_slot = -1;
     static int s_had_file = 0;
 
     int fd = daemon_sys_open("/data/anycontroller/anycontroller.vibe", 0 /* O_RDONLY */, 0);
@@ -44,25 +45,42 @@ static void check_vibe_file(void) {
         fd = daemon_sys_open("/user/data/anycontroller/anycontroller.vibe", 0 /* O_RDONLY */, 0);
     }
     if (fd >= 0) {
-        uint8_t vibe[2] = {0, 0};
+        uint8_t vibe[3] = {0, 0, 0};
         int n = daemon_sys_read(fd, vibe, sizeof(vibe));
         daemon_sys_close(fd);
         if (n >= 2) {
+            int req_slot = (n >= 3 && vibe[2] < VPAD_MAX_SLOTS) ? (int)vibe[2] : -1;
             s_had_file = 1;
-            if (vibe[0] != s_last_lg || vibe[1] != s_last_sm) {
+            if (vibe[0] != s_last_lg || vibe[1] != s_last_sm || req_slot != s_last_slot) {
+                if (s_last_slot >= 0 && s_last_slot != req_slot && (s_last_lg > 0 || s_last_sm > 0)) {
+                    bt_driver_send_rumble_slot(s_last_slot, 0, 0, NULL);
+                }
                 s_last_lg = vibe[0];
                 s_last_sm = vibe[1];
-                usb_driver_send_rumble(s_last_lg, s_last_sm);
-                bt_driver_send_rumble(s_last_lg, s_last_sm, NULL);
+                s_last_slot = req_slot;
+                if (req_slot >= 0) {
+                    bt_driver_send_rumble_slot(req_slot, s_last_lg, s_last_sm, NULL);
+                    if (req_slot == 0) {
+                        usb_driver_send_rumble(s_last_lg, s_last_sm);
+                    }
+                } else {
+                    usb_driver_send_rumble(s_last_lg, s_last_sm);
+                    bt_driver_send_rumble(s_last_lg, s_last_sm, NULL);
+                }
             }
         }
     } else {
         if (s_had_file) {
+            if (s_last_slot >= 0) {
+                bt_driver_send_rumble_slot(s_last_slot, 0, 0, NULL);
+            } else {
+                bt_driver_send_rumble(0, 0, NULL);
+            }
+            usb_driver_send_rumble(0, 0);
             s_had_file = 0;
             s_last_lg = 0;
             s_last_sm = 0;
-            usb_driver_send_rumble(0, 0);
-            bt_driver_send_rumble(0, 0, NULL);
+            s_last_slot = -1;
         }
     }
 }
@@ -98,8 +116,9 @@ int main(int argc, char *argv[]) {
     daemon_sys_unlink("/data/onefamily/onefamily.reload");
     daemon_sys_unlink("/user/data/onefamily/onefamily.reload");
 
-    // 2. Load user configuration from /data/anycontroller/anycontroller.ini
+    // 2. Load user configuration from /data/anycontroller/anycontroller.ini & per-slot DS4 configs
     daemon_config_load(&g_daemon_config);
+    vpad_reload_ds4_configs();
     daemon_log(LOG_LEVEL_INFO, "Configuration loaded: guide_action=%d, deadzone=%d, trigger=%d, rumble=%d",
                g_daemon_config.guide_action,
                g_daemon_config.stick_deadzone,
@@ -157,6 +176,8 @@ int main(int argc, char *argv[]) {
                 }
                 usb_driver_reload_remap();
                 daemon_config_load(&g_daemon_config);
+                vpad_reload_ds4_configs();
+                bt_driver_reload_profiles();
                 bt_driver_refresh_settings();
                 vpad_apply_ds4_lightbar();
             }
@@ -197,9 +218,9 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Smooth 16 Hz animation when native PS4 DS4 is in Dynamic Rainbow (4) or Breathing (5) mode
+        // Smooth 16 Hz animation when any native PS4 DS4 slot is in Dynamic Rainbow (4) or Breathing (5) mode
         if (loop_count % 15 == 0) {
-            if (g_daemon_config.ds4_lightbar_mode == 4 || g_daemon_config.ds4_lightbar_mode == 5) {
+            if (vpad_has_dynamic_ds4_lightbar()) {
                 vpad_apply_ds4_lightbar();
             }
         }
@@ -207,7 +228,7 @@ int main(int argc, char *argv[]) {
         // Maintain static DS4 custom lightbar/brightness at ~6 Hz (every 40 loops = 160ms)
         // so exiting apps / SceShellUI focus changes never revert custom colors back to default Blue
         if (loop_count % 40 == 0) {
-            if (g_daemon_config.ds4_lightbar_mode != 0 || g_daemon_config.ds4_brightness != 0) {
+            if (vpad_has_custom_ds4_lightbar()) {
                 vpad_apply_ds4_lightbar();
             }
         }

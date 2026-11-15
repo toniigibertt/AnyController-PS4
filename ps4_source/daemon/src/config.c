@@ -10,6 +10,7 @@
 #include "bt_driver.h"
 #include "vpad.h"
 #include <fcntl.h>
+#include <stdio.h>
 #include <string.h>
 
 DaemonConfig g_daemon_config;
@@ -108,29 +109,8 @@ static int str_case_eq(const char *a, const char *b) {
     return (*a == '\0' && *b == '\0');
 }
 
-void daemon_config_load(DaemonConfig *cfg) {
-    if (!cfg) return;
-
-    daemon_config_init_defaults(cfg);
-
-    int fd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH, O_RDONLY, 0);
-    if (fd < 0) {
-        fd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH_USER, O_RDONLY, 0);
-    }
-    if (fd < 0) {
-        g_config = *cfg;
-        return;
-    }
-
-    static char buf[ONEFAMILY_CONFIG_BUFFER_SIZE];
-    memset(buf, 0, sizeof(buf));
-    int bytes_read = daemon_sys_read(fd, buf, sizeof(buf) - 1);
-    daemon_sys_close(fd);
-
-    if (bytes_read <= 0) {
-        g_config = *cfg;
-        return;
-    }
+static void daemon_config_parse_buffer(DaemonConfig *cfg, char *buf) {
+    if (!cfg || !buf) return;
 
     char *line = buf;
     char *next_line = NULL;
@@ -247,9 +227,76 @@ void daemon_config_load(DaemonConfig *cfg) {
 
         line = next_line;
     }
+}
+
+void daemon_config_load(DaemonConfig *cfg) {
+    if (!cfg) return;
+
+    daemon_config_init_defaults(cfg);
+
+    int fd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH, O_RDONLY, 0);
+    if (fd < 0) {
+        fd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH_USER, O_RDONLY, 0);
+    }
+    if (fd < 0) {
+        g_config = *cfg;
+        return;
+    }
+
+    static char buf[ONEFAMILY_CONFIG_BUFFER_SIZE];
+    memset(buf, 0, sizeof(buf));
+    int bytes_read = daemon_sys_read(fd, buf, sizeof(buf) - 1);
+    daemon_sys_close(fd);
+
+    if (bytes_read <= 0) {
+        g_config = *cfg;
+        return;
+    }
+
+    daemon_config_parse_buffer(cfg, buf);
 
     // Sync global g_config
     g_config = *cfg;
+}
+
+void daemon_config_load_device(DaemonConfig *cfg, const char *device_ini_filename) {
+    if (!cfg) return;
+
+    // 1. Start from current global configuration defaults
+    daemon_config_init_defaults(cfg);
+    int gfd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH, O_RDONLY, 0);
+    if (gfd < 0) {
+        gfd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH_USER, O_RDONLY, 0);
+    }
+    if (gfd >= 0) {
+        char gbuf[ONEFAMILY_CONFIG_BUFFER_SIZE];
+        memset(gbuf, 0, sizeof(gbuf));
+        int gr = daemon_sys_read(gfd, gbuf, sizeof(gbuf) - 1);
+        daemon_sys_close(gfd);
+        if (gr > 0) {
+            daemon_config_parse_buffer(cfg, gbuf);
+        }
+    }
+
+    // 2. Overlay persistent hardware-specific settings if present
+    if (!device_ini_filename || device_ini_filename[0] == '\0') return;
+
+    char path[256];
+    snprintf(path, sizeof(path), "/data/anycontroller/controllers/%s", device_ini_filename);
+    int dfd = daemon_sys_open(path, O_RDONLY, 0);
+    if (dfd < 0) {
+        snprintf(path, sizeof(path), "/user/data/anycontroller/controllers/%s", device_ini_filename);
+        dfd = daemon_sys_open(path, O_RDONLY, 0);
+    }
+    if (dfd >= 0) {
+        char dbuf[ONEFAMILY_CONFIG_BUFFER_SIZE];
+        memset(dbuf, 0, sizeof(dbuf));
+        int dr = daemon_sys_read(dfd, dbuf, sizeof(dbuf) - 1);
+        daemon_sys_close(dfd);
+        if (dr > 0) {
+            daemon_config_parse_buffer(cfg, dbuf);
+        }
+    }
 }
 
 bool daemon_config_check_reload(DaemonConfig *cfg) {
@@ -294,8 +341,11 @@ bool daemon_config_check_reload(DaemonConfig *cfg) {
     if (ds_changed) {
         daemon_log(LOG_LEVEL_INFO, "DualSense configuration changed: applying settings on the fly!");
         bt_driver_refresh_settings();
+    } else {
+        bt_driver_reload_profiles();
     }
 
+    vpad_reload_ds4_configs();
     if (ds4_changed) {
         daemon_log(LOG_LEVEL_INFO, "DualShock 4 configuration changed: applying lightbar settings on the fly!");
         vpad_apply_ds4_lightbar();

@@ -17,9 +17,9 @@ static const int SIDEBAR_X = 56;
 static const int SIDEBAR_W = 320;
 static const int CARD_X = 410;
 static const int CARD_W = 1140;
-static const int CARD_H = 82;
-static const int CARD_Y_START = 264;
-static const int CARD_Y_STEP = 90;
+static const int CARD_H = 78;
+static const int CARD_Y_START = 266;
+static const int CARD_Y_STEP = 86;
 
 // Colors - AnyController Studio Original Obsidian & Cyber Cyan Palette
 static const Color COLOR_BLUE_GLOW   = { 0, 95, 165 };
@@ -316,20 +316,62 @@ void UI::draw_btn_badge(Scene2D* scene, int x, int y, int w, int h, const char* 
 void UI::draw_option_guide_box(Scene2D* scene, const char* optionTitle, const char* whatItDoes, const char* currentValEffect, Color accentColor) {
     if (!scene) return;
     const int GX = 410;
-    const int GY = 736;
+    const int GY = 724;
     const int GW = 1440;
-    const int GH = 114;
+    const int GH = 122;
 
     draw_rounded_rect(scene, GX, GY, GW, GH, 10, Color{ 10, 18, 34 });
     draw_rounded_outline(scene, GX, GY, GW, GH, 10, accentColor, 1);
     draw_rounded_rect(scene, GX, GY, 6, GH, 3, accentColor);
 
     std::string hdr = std::string("QUÉ CAMBIA ESTA OPCIÓN EN TU MANDO  •  ") + (optionTitle ? optionTitle : "");
-    draw_text(scene, hdr, fontFooter, GX + 24, GY + 29, COLOR_BLUE_BRIGHT);
-    draw_text(scene, whatItDoes ? whatItDoes : "", fontCardDesc, GX + 24, GY + 58, COLOR_WHITE);
+    draw_text(scene, hdr, fontFooter, GX + 24, GY + 30, COLOR_BLUE_BRIGHT);
+    draw_text(scene, whatItDoes ? whatItDoes : "", fontCardDesc, GX + 24, GY + 62, COLOR_WHITE);
 
     std::string eff = std::string("Efecto actual: ") + (currentValEffect ? currentValEffect : "");
-    draw_text(scene, eff, fontCardDesc, GX + 24, GY + 90, Color{ 0, 255, 160 });
+    draw_text(scene, eff, fontCardDesc, GX + 24, GY + 96, Color{ 0, 255, 160 });
+}
+
+void UI::draw_target_selector_strip(Scene2D* scene, const std::vector<ControllerTarget>* targets, int activeTargetIndex) {
+    if (!scene) return;
+    const int SX = 410;
+    const int SY = 132;
+    const int SW = 1440;
+    const int SH = 42;
+
+    ControllerTarget fallback;
+    fallback.shortLabel = "Global (Por Defecto)";
+    fallback.detailLabel = "Global (/data/anycontroller/anycontroller.ini)";
+
+    const ControllerTarget* active = &fallback;
+    int count = 1;
+    if (targets && !targets->empty()) {
+        count = (int)targets->size();
+        int idx = (activeTargetIndex >= 0 && activeTargetIndex < count) ? activeTargetIndex : 0;
+        active = &((*targets)[idx]);
+    }
+
+    draw_rounded_rect(scene, SX, SY, SW, SH, 8, Color{ 10, 19, 36 });
+    draw_rounded_outline(scene, SX, SY, SW, SH, 8,
+                         active->id.empty() ? COLOR_CARD_BORDER : (active->hasCustom ? Color{ 0, 240, 180 } : COLOR_BLUE_MAIN), 1);
+
+    draw_image(scene, btnL3, SX + 10, SY + 5);
+    char labelBuf[192];
+    snprintf(labelBuf, sizeof(labelBuf), "Editando (%d/%d): %s",
+             (targets && !targets->empty()) ? (activeTargetIndex + 1) : 1,
+             count,
+             active->detailLabel.c_str());
+    draw_text(scene, labelBuf, fontCardDesc, SX + 52, SY + 27, COLOR_WHITE);
+
+    if (active->id.empty()) {
+        draw_text(scene, "BASE GLOBAL • Los mandos sin perfil propio heredan esto", fontFooter, SX + 830, SY + 27, COLOR_BLUE_BRIGHT);
+    } else if (active->hasCustom) {
+        draw_text(scene, "[MEMORIA PROPIA]", fontFooter, SX + 1015, SY + 27, Color{ 0, 255, 160 });
+        draw_image(scene, btnR3, SX + 1205, SY + 5);
+        draw_text(scene, "Restaurar a Global", fontFooter, SX + 1248, SY + 27, COLOR_WHITE);
+    } else {
+        draw_text(scene, "[HEREDANDO GLOBAL • Al cambiar se guarda para este mando]", fontFooter, SX + 835, SY + 27, Color{ 245, 195, 70 });
+    }
 }
 
 void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int selectedCard,
@@ -340,46 +382,51 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
                 bool remapTestMode,
                 const PkgUpdater* updater,
                 bool dualsenseConnected, int dsSelectedCard,
-                int ds4SelectedCard, bool dualshock4Connected) {
+                int ds4SelectedCard, bool dualshock4Connected,
+                const std::vector<ControllerTarget>* targets,
+                int activeTargetIndex) {
     if (!scene) return;
+    (void)dualshock4Connected;
 
     // 1. Blit native background + Animated PlayStation XMB Wave & Bokeh Sparkles
     psBg.update(0.01666f);
     psBg.render(scene, cached_bg);
 
-    // 2. Original AnyController Studio Top Header Bar (Clean Glass Studio Deck)
-    draw_rounded_rect(scene, 56, 48, 1808, 76, 12, Color{ 9, 14, 26 });
-    draw_rounded_outline(scene, 56, 48, 1808, 76, 12, COLOR_CARD_BORDER, 1);
-    // Left Cyan Accent Bar inside Header
-    draw_rounded_rect(scene, 56, 48, 6, 76, 3, COLOR_BLUE_MAIN);
+    // 2. Original AnyController Studio Top Header Bar
+    draw_rounded_rect(scene, 56, 48, 1808, 74, 12, Color{ 9, 14, 26 });
+    draw_rounded_outline(scene, 56, 48, 1808, 74, 12, COLOR_CARD_BORDER, 1);
+    draw_rounded_rect(scene, 56, 48, 6, 74, 3, COLOR_BLUE_MAIN);
 
-    // Studio Geometric Emblem
-    draw_rounded_rect(scene, 82, 62, 48, 48, 10, Color{ 15, 34, 64 });
-    draw_rounded_outline(scene, 82, 62, 48, 48, 10, COLOR_BLUE_MAIN, 2);
-    draw_image(scene, btnPs, 90, 70);
+    draw_rounded_rect(scene, 82, 61, 48, 48, 10, Color{ 15, 34, 64 });
+    draw_rounded_outline(scene, 82, 61, 48, 48, 10, COLOR_BLUE_MAIN, 2);
+    draw_image(scene, btnPs, 90, 69);
 
     int titleW = scene->GetTextWidth("CONTROLLER CONTROL CENTER ", fontCardTitle);
-    draw_text(scene, "CONTROLLER CONTROL CENTER ", fontCardTitle, 148, 82, COLOR_WHITE);
-    draw_text(scene, "PS4", fontCardTitle, 148 + titleW, 82, COLOR_BLUE_BRIGHT);
-    draw_text(scene, "Motor ANYCONTROLLER • DualSense PS5, DualShock 4 Nativo y Periféricos HID", fontCardDesc, 148, 108, COLOR_TEXT_DIM);
+    draw_text(scene, "CONTROLLER CONTROL CENTER ", fontCardTitle, 148, 81, COLOR_WHITE);
+    draw_text(scene, "PS4", fontCardTitle, 148 + titleW, 81, COLOR_BLUE_BRIGHT);
+    draw_text(scene, "Motor ANYCONTROLLER v" ONEFAMILY_VERSION_STRING " • DualSense PS5, DualShock 4 Nativo y Memoria por Mando", fontCardDesc, 148, 107, COLOR_TEXT_DIM);
 
-    // Right status indicator in top bar showing active controller type
-    const char* activeCtrlLabel = dualsenseConnected ? "MANDO: PS5 DUALSENSE" : "MANDO: PS4 DUALSHOCK 4";
-    draw_rounded_rect(scene, 1570, 66, 272, 40, 8, Color{ 12, 28, 48 });
-    draw_rounded_outline(scene, 1570, 66, 272, 40, 8, COLOR_BLUE_GLOW, 1);
-    draw_circle(scene, 1590, 86, 5, Color{ 0, 240, 140 });
-    draw_text(scene, activeCtrlLabel, fontCardDesc, 1606, 92, COLOR_WHITE);
+    std::string activeShort = "Global";
+    if (targets && activeTargetIndex >= 0 && activeTargetIndex < (int)targets->size()) {
+        activeShort = (*targets)[activeTargetIndex].shortLabel;
+    }
 
-    // Header Persistent Update Badge (visible across all tabs if an update is available)
+    char hdrCtrlStr[96];
+    snprintf(hdrCtrlStr, sizeof(hdrCtrlStr), "ACTIVO: %s", activeShort.c_str());
+    draw_rounded_rect(scene, 1545, 65, 297, 40, 8, Color{ 12, 28, 48 });
+    draw_rounded_outline(scene, 1545, 65, 297, 40, 8, COLOR_BLUE_GLOW, 1);
+    draw_circle(scene, 1565, 85, 5, Color{ 0, 240, 140 });
+    draw_text(scene, hdrCtrlStr, fontCardDesc, 1580, 91, COLOR_WHITE);
+
     if (updater && updater->get_state() == UPDATER_UPDATE_AVAILABLE) {
-        int bX = 1280, bY = 66, bW = 275, bH = 40;
+        int bX = 1255, bY = 65, bW = 275, bH = 40;
         draw_rounded_rect(scene, bX, bY, bW, bH, 8, Color{ 10, 42, 28 });
         draw_rounded_outline(scene, bX, bY, bW, bH, 8, Color{ 0, 255, 150 }, 2);
         std::string badgeStr = "NUEVA: " + updater->get_latest_version();
         draw_text(scene, badgeStr, fontCardDesc, bX + 18, bY + 26, Color{ 0, 255, 150 });
     }
 
-    // 3. Left Navigation Dock (shows both DualSense PS5 and DualShock 4, ordering active controller first)
+    // 3. Left Navigation Dock
     struct SidebarTab {
         int tabId;
         const char* label;
@@ -395,27 +442,25 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
         sidebarTabs.push_back({ TAB_DUALSHOCK4, "DualShock 4", "Mando PS4 activo", &iconRumble });
         sidebarTabs.push_back({ TAB_DUALSENSE, "DualSense PS5", "Configurar mando PS5", &btnPs });
     }
-    sidebarTabs.push_back({ TAB_TESTER, "Laboratorio", "Probador y calibración", &iconMode });
+    sidebarTabs.push_back({ TAB_TESTER, "Laboratorio", "Probador original 2D", &iconMode });
     if (hidConnected) {
         sidebarTabs.push_back({ TAB_REMAP_HID, "Mapeo USB HID", "Perfiles a medida", &iconRemap });
     }
     sidebarTabs.push_back({ TAB_INFO, "Sistema y Red", "Actualizador GitHub", &iconInfo });
 
-    // Navigation Dock Container Header
-    draw_rounded_rect(scene, SIDEBAR_X, 145, SIDEBAR_W, 56, 10, Color{ 12, 20, 36 });
-    draw_rounded_outline(scene, SIDEBAR_X, 145, SIDEBAR_W, 56, 10, COLOR_CARD_BORDER, 1);
-    draw_image(scene, btnL1, SIDEBAR_X + 16, 157);
-    draw_text_centered(scene, "MÓDULOS", fontCardDesc, SIDEBAR_X + SIDEBAR_W / 2, 180, COLOR_BLUE_BRIGHT);
-    draw_image(scene, btnR1, SIDEBAR_X + SIDEBAR_W - 58, 157);
+    draw_rounded_rect(scene, SIDEBAR_X, 132, SIDEBAR_W, 54, 10, Color{ 12, 20, 36 });
+    draw_rounded_outline(scene, SIDEBAR_X, 132, SIDEBAR_W, 54, 10, COLOR_CARD_BORDER, 1);
+    draw_image(scene, btnL1, SIDEBAR_X + 16, 143);
+    draw_text_centered(scene, "MÓDULOS", fontCardDesc, SIDEBAR_X + SIDEBAR_W / 2, 166, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnR1, SIDEBAR_X + SIDEBAR_W - 58, 143);
 
     int totalSidebarTabs = (int)sidebarTabs.size();
     for (int i = 0; i < totalSidebarTabs; i++) {
-        int tabY = 216 + i * 86;
+        int tabY = 200 + i * 86;
         bool isCurrent = (sidebarTabs[i].tabId == currentTabId);
         if (isCurrent) {
             draw_rounded_rect(scene, SIDEBAR_X, tabY, SIDEBAR_W, 74, 10, COLOR_SIDEBAR_BLUE);
             draw_rounded_outline(scene, SIDEBAR_X, tabY, SIDEBAR_W, 74, 10, COLOR_BLUE_MAIN, 2);
-            // Active vertical bar indicator
             draw_rounded_rect(scene, SIDEBAR_X, tabY + 10, 5, 54, 2, COLOR_BLUE_BRIGHT);
             if (sidebarTabs[i].icon) draw_image(scene, *sidebarTabs[i].icon, SIDEBAR_X + 18, tabY + 15);
             draw_text(scene, sidebarTabs[i].label, fontCardTitle, SIDEBAR_X + 74, tabY + 34, COLOR_WHITE);
@@ -435,13 +480,14 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
 
     // 4. Main Content Area
     if (currentTabId == TAB_SETTINGS) {
-        // Section Banner for Global Settings
-        draw_rounded_rect(scene, CARD_X, 145, CARD_W + 300, 104, 12, Color{ 13, 23, 42 });
-        draw_rounded_outline(scene, CARD_X, 145, CARD_W + 300, 104, 12, COLOR_CARD_BORDER, 1);
-        draw_rounded_rect(scene, CARD_X, 145, 6, 104, 3, COLOR_BLUE_MAIN);
-        draw_image(scene, iconGear, CARD_X + 26, 173);
-        draw_text(scene, "Motor Pro de Respuesta, Curvas de Joysticks y Turbo", fontCardTitle, CARD_X + 88, 188, COLOR_WHITE);
-        draw_text(scene, "Perfiles rápidos eSports/SimRacing/Eco, curvas analógicas y fuego rápido en tiempo real (/data/anycontroller/anycontroller.ini).", fontCardDesc, CARD_X + 88, 220, COLOR_TEXT_DIM);
+        draw_target_selector_strip(scene, targets, activeTargetIndex);
+
+        draw_rounded_rect(scene, CARD_X, 182, 1440, 74, 12, Color{ 13, 23, 42 });
+        draw_rounded_outline(scene, CARD_X, 182, 1440, 74, 12, COLOR_CARD_BORDER, 1);
+        draw_rounded_rect(scene, CARD_X, 182, 6, 74, 3, COLOR_BLUE_MAIN);
+        draw_image(scene, iconGear, CARD_X + 24, 198);
+        draw_text(scene, "Motor Pro de Respuesta, Curvas de Joysticks y Turbo", fontCardTitle, CARD_X + 84, 212, COLOR_WHITE);
+        draw_text(scene, "Personaliza la base Global o cada mando por separado con L3 (memoria persistente en consola).", fontCardDesc, CARD_X + 84, 239, COLOR_TEXT_DIM);
 
         // --- SETTINGS VIEW (8 Cards, 5 Visible with Scroll) ---
         const int TOTAL_CARDS = 8;
@@ -533,10 +579,10 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
         }
 
         if (scrollOffset > 0) {
-            draw_text(scene, "^", fontCardTitle, CARD_X + fullCardW / 2, 260, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "^", fontCardTitle, CARD_X + fullCardW / 2, 263, COLOR_BLUE_BRIGHT);
         }
         if (scrollOffset + VISIBLE_CARDS < TOTAL_CARDS) {
-            draw_text(scene, "v", fontCardTitle, CARD_X + fullCardW / 2, 724, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "v", fontCardTitle, CARD_X + fullCardW / 2, 712, COLOR_BLUE_BRIGHT);
         }
 
         // Dynamic explanation panel for selected Global Setting
@@ -605,54 +651,65 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
         }
         draw_option_guide_box(scene, cardTitles[selIdx], settingWhat[selIdx], settingEff.c_str(), COLOR_BLUE_MAIN);
 
-        // 5. Footer for Settings
-        scene->DrawRectangle(56, 865, 1808, 2, COLOR_DIVIDER);
+        // 5. Footer for Settings (Single unambiguous role per button)
+        scene->DrawRectangle(56, 862, 1808, 2, COLOR_DIVIDER);
 
-        draw_image(scene, iconSave, 56, 890);
-        draw_text(scene, "Controller Control Center PS4 (Motor ANYCONTROLLER)", fontCardTitle, 116, 912, COLOR_WHITE);
-        draw_text(scene, "Sincronización instantánea con /data/anycontroller/anycontroller.ini", fontFooter, 116, 938, COLOR_BLUE_BRIGHT);
+        draw_image(scene, iconSave, 56, 888);
+        draw_text(scene, "Controller Control Center PS4 (" ONEFAMILY_VERSION_STRING ")", fontCardTitle, 116, 910, COLOR_WHITE);
+        draw_text(scene, "Cada mando guarda su memoria independiente al cambiar ajustes • Global es la base", fontFooter, 116, 936, COLOR_BLUE_BRIGHT);
 
-        draw_image(scene, btnTriangle, 1160, 897);
-        draw_text(scene, "Preset Pro", fontFooter, 1205, 922, Color{ 0, 255, 150 });
+        draw_image(scene, btnL3, 980, 895);
+        draw_text(scene, "Mando", fontFooter, 1025, 920, COLOR_WHITE);
 
-        draw_image(scene, btnArrows, 1370, 901);
-        draw_text(scene, "Modificar", fontFooter, 1424, 922, COLOR_TEXT_DIM);
+        draw_image(scene, btnTriangle, 1140, 895);
+        draw_text(scene, "Preset Pro", fontFooter, 1185, 920, Color{ 0, 255, 150 });
 
-        draw_image(scene, btnCross, 1540, 897);
-        draw_text(scene, "Aplicar", fontFooter, 1585, 922, COLOR_BLUE_BRIGHT);
+        draw_image(scene, btnArrows, 1345, 899);
+        draw_text(scene, "Modificar", fontFooter, 1398, 920, COLOR_TEXT_DIM);
 
-        draw_image(scene, btnOptions, 1690, 900);
-        draw_text(scene, "Salir", fontFooter, 1770, 922, COLOR_TEXT_DIM);
+        draw_image(scene, btnCross, 1525, 895);
+        draw_text(scene, "Guardar", fontFooter, 1570, 920, COLOR_BLUE_BRIGHT);
+
+        draw_image(scene, btnOptions, 1690, 898);
+        draw_text(scene, "Salir", fontFooter, 1770, 920, COLOR_TEXT_DIM);
 
     } else if (currentTabId == TAB_TESTER) {
-        // --- INPUT TESTER & 3D CONTROLLER LAB VIEW ---
+        bool slotIsDs = dualsenseConnected;
+        std::string slotTargetShort = activeShort;
+        if (targets) {
+            for (size_t ti = 0; ti < targets->size(); ti++) {
+                if ((*targets)[ti].slotIndex == tester.selectedSlot) {
+                    slotIsDs = (*targets)[ti].isDualSense;
+                    slotTargetShort = (*targets)[ti].shortLabel;
+                    break;
+                }
+            }
+        }
         controller3D.update(0.01666f, padData.buttons, tester.rumblePhase);
-        render_tester(scene, cfg, padData, tester, dualsenseConnected);
+        render_tester(scene, cfg, padData, tester, slotIsDs, slotTargetShort.c_str());
 
     } else if (currentTabId == TAB_DUALSENSE && hidStatus) {
-        // --- DUALSENSE PS5 EXCLUSIVE MANAGEMENT VIEW ---
-        render_dualsense(scene, cfg, dsSelectedCard, *hidStatus);
+        render_dualsense(scene, cfg, dsSelectedCard, *hidStatus, targets, activeTargetIndex);
 
     } else if (currentTabId == TAB_DUALSHOCK4) {
-        // --- DUALSHOCK 4 NATIVE PS4 CONTROLLER VIEW ---
-        render_dualshock4(scene, cfg, ds4SelectedCard, padData, tester);
+        render_dualshock4(scene, cfg, ds4SelectedCard, padData, tester, targets, activeTargetIndex);
 
     } else if (currentTabId == TAB_REMAP_HID && hidConnected && hidStatus && hidProfile) {
-        // --- REMAP HID VIEW ---
         render_remap(scene, *hidStatus, *hidProfile, remapSelectedRow, padData, remapTestMode);
 
     } else {
-        // --- INFO VIEW ---
-        // Info Card 1: Overview & Version
-        draw_rounded_rect(scene, CARD_X, 280, CARD_W, 140, 12, COLOR_CARD_BG);
-        draw_rounded_outline(scene, CARD_X, 280, CARD_W, 140, 12, COLOR_CARD_BORDER, 1);
-        draw_image(scene, iconInfo, CARD_X + 24, 298);
-        draw_text(scene, "Controller Control Center PS4 (Title ID: TONI88888)", fontCardTitle, CARD_X + 90, 312, COLOR_WHITE);
-        draw_text(scene, "Versión: " ONEFAMILY_VERSION_SFO " / " ONEFAMILY_VERSION_STRING " (Edición Pro Multijugador en Español)", fontCardDesc, CARD_X + 90, 342, COLOR_BLUE_BRIGHT);
-        draw_text(scene, "Payload Demonio: ANYCONTROLLER (/data/payloads/anycontroller.bin)", fontCardDesc, CARD_X + 90, 372, COLOR_TEXT_DIM);
-        draw_text(scene, "Configuración: /data/anycontroller/anycontroller.ini", fontCardDesc, CARD_X + 90, 400, COLOR_TEXT_DIM);
+        // --- INFO VIEW (Full 1440px width, zero bar overflow, crisp spacing) ---
+        const int INFO_W = 1440;
 
-        // Info Card 2: Online Update Status Card
+        // Card 1: Version & Architecture (Y = 132..256, H = 124)
+        draw_rounded_rect(scene, CARD_X, 132, INFO_W, 124, 12, COLOR_CARD_BG);
+        draw_rounded_outline(scene, CARD_X, 132, INFO_W, 124, 12, COLOR_CARD_BORDER, 1);
+        draw_image(scene, iconInfo, CARD_X + 24, 150);
+        draw_text(scene, "Controller Control Center PS4 (Title ID: TONI88888 • v" ONEFAMILY_VERSION_STRING ")", fontCardTitle, CARD_X + 90, 164, COLOR_WHITE);
+        draw_text(scene, "Payload Demonio: ANYCONTROLLER (/data/payloads/anycontroller.bin)", fontCardDesc, CARD_X + 90, 194, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "Base Global: /data/anycontroller/anycontroller.ini  •  Memoria por Mando: /data/anycontroller/controllers/*.ini", fontCardDesc, CARD_X + 90, 224, COLOR_TEXT_DIM);
+
+        // Card 2: Online Update Status (Y = 268..396, H = 128)
         UpdaterState upState = updater ? updater->get_state() : UPDATER_IDLE;
         Color updateBg = COLOR_CARD_BG;
         Color updateBorder = COLOR_CARD_BORDER;
@@ -668,103 +725,108 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
             updateBorder = COLOR_BLUE_MAIN;
         }
 
-        draw_rounded_rect(scene, CARD_X, 436, CARD_W, 130, 12, updateBg);
-        draw_rounded_outline(scene, CARD_X, 436, CARD_W, 130, 12, updateBorder, (upState == UPDATER_UPDATE_AVAILABLE || upState == UPDATER_DOWNLOAD_SUCCESS) ? 2 : 1);
-        draw_image(scene, iconSave, CARD_X + 24, 454);
+        draw_rounded_rect(scene, CARD_X, 268, INFO_W, 128, 12, updateBg);
+        draw_rounded_outline(scene, CARD_X, 268, INFO_W, 128, 12, updateBorder,
+                             (upState == UPDATER_UPDATE_AVAILABLE || upState == UPDATER_DOWNLOAD_SUCCESS) ? 2 : 1);
+        draw_image(scene, iconSave, CARD_X + 24, 286);
 
         if (upState == UPDATER_UPDATE_AVAILABLE) {
-            std::string titleStr = "Nueva Actualizacion Disponible: " + updater->get_latest_version();
-            draw_text(scene, titleStr, fontCardTitle, CARD_X + 90, 468, Color{ 0, 255, 150 });
-            draw_text(scene, "Pulsa [TRIANGULO] para descargar el paquete a /data/pkg/", fontCardDesc, CARD_X + 90, 498, COLOR_WHITE);
-            draw_text(scene, "Tamano: ~8.5 MB - Listo para instalar en GoldHEN Package Installer", fontCardDesc, CARD_X + 90, 526, COLOR_TEXT_DIM);
+            std::string titleStr = "Nueva Actualización Disponible: " + updater->get_latest_version();
+            draw_text(scene, titleStr, fontCardTitle, CARD_X + 90, 300, Color{ 0, 255, 150 });
+            draw_text(scene, "Pulsa [EQUIS (X)] para descargar el PKG directamente en /data/pkg/", fontCardDesc, CARD_X + 90, 330, COLOR_WHITE);
+            draw_text(scene, "Listo para instalar en GoldHEN -> Package Installer sin usar PC ni USB", fontCardDesc, CARD_X + 90, 360, COLOR_TEXT_DIM);
         } else if (upState == UPDATER_DOWNLOADING) {
             UpdaterProgress prog = updater->get_progress();
             char dlTitle[128];
-            snprintf(dlTitle, sizeof(dlTitle), "Descargando Actualizacion: %d%% (%llu MB / %llu MB)",
+            snprintf(dlTitle, sizeof(dlTitle), "Descargando Actualización: %d%% (%llu MB / %llu MB)",
                      prog.percent,
                      (unsigned long long)(prog.bytesReceived / (1024 * 1024)),
                      (unsigned long long)(prog.totalBytes / (1024 * 1024)));
-            draw_text(scene, dlTitle, fontCardTitle, CARD_X + 90, 468, COLOR_BLUE_BRIGHT);
+            draw_text(scene, dlTitle, fontCardTitle, CARD_X + 90, 300, COLOR_BLUE_BRIGHT);
 
-            // Progress bar
             int barX = CARD_X + 90;
-            int barY = 486;
-            int barW = 1200;
+            int barY = 320;
+            int barW = 1280;
             int barH = 14;
             draw_rounded_rect(scene, barX, barY, barW, barH, 4, Color{ 20, 32, 50 });
             int fillW = (barW * prog.percent) / 100;
-            if (fillW > 0) {
-                draw_rounded_rect(scene, barX, barY, fillW, barH, 4, COLOR_BLUE_BRIGHT);
-            }
+            if (fillW > 0) draw_rounded_rect(scene, barX, barY, fillW, barH, 4, COLOR_BLUE_BRIGHT);
             std::string dlPathMsg = "Guardando en " + (updater ? updater->get_target_pkg_path() : std::string("/data/pkg/")) + "...";
-            draw_text(scene, dlPathMsg, fontCardDesc, CARD_X + 90, 526, COLOR_TEXT_DIM);
+            draw_text(scene, dlPathMsg, fontCardDesc, CARD_X + 90, 362, COLOR_TEXT_DIM);
         } else if (upState == UPDATER_DOWNLOAD_SUCCESS) {
-            draw_text(scene, "Descarga Completada! Paquete Guardado", fontCardTitle, CARD_X + 90, 468, Color{ 0, 255, 150 });
-            std::string savedMsg = "Paquete guardado en: " + (updater ? updater->get_target_pkg_path() : std::string("/data/pkg/"));
-            draw_text(scene, savedMsg, fontCardDesc, CARD_X + 90, 498, COLOR_WHITE);
-            draw_text(scene, "Abre Ajustes PS4 -> GoldHEN -> Package Installer y pulsa (X) para instalar", fontCardDesc, CARD_X + 90, 526, Color{ 0, 255, 150 });
+            draw_text(scene, "¡Descarga Completada! Paquete Guardado en PS4", fontCardTitle, CARD_X + 90, 300, Color{ 0, 255, 150 });
+            std::string savedMsg = "Archivo guardado en: " + (updater ? updater->get_target_pkg_path() : std::string("/data/pkg/"));
+            draw_text(scene, savedMsg, fontCardDesc, CARD_X + 90, 330, COLOR_WHITE);
+            draw_text(scene, "Abre Ajustes PS4 -> GoldHEN -> Package Installer para instalar.", fontCardDesc, CARD_X + 90, 360, Color{ 0, 255, 150 });
         } else if (upState == UPDATER_UP_TO_DATE) {
-            draw_text(scene, "Controller Control Center PS4 esta al Dia", fontCardTitle, CARD_X + 90, 468, COLOR_WHITE);
-            draw_text(scene, "Tienes la version mas reciente instalada y verificada.", fontCardDesc, CARD_X + 90, 498, COLOR_BLUE_BRIGHT);
-            draw_text(scene, "Actualizaciones automaticas directas desde GitHub Releases", fontCardDesc, CARD_X + 90, 526, COLOR_TEXT_DIM);
+            draw_text(scene, "Controller Control Center PS4 está al Día (v" ONEFAMILY_VERSION_STRING ")", fontCardTitle, CARD_X + 90, 300, COLOR_WHITE);
+            draw_text(scene, "Tienes la última versión instalada y verificada en GitHub Releases.", fontCardDesc, CARD_X + 90, 330, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "Pulsa [EQUIS (X)] cuando quieras volver a comprobar actualizaciones en línea.", fontCardDesc, CARD_X + 90, 360, COLOR_TEXT_DIM);
         } else if (upState == UPDATER_CHECKING) {
-            draw_text(scene, "Buscando Actualizaciones en GitHub...", fontCardTitle, CARD_X + 90, 468, COLOR_WHITE);
-            draw_text(scene, "Conectando con GitHub Releases...", fontCardDesc, CARD_X + 90, 498, COLOR_TEXT_DIM);
-            draw_text(scene, "Verificando nuevos paquetes PKG en GitHub...", fontCardDesc, CARD_X + 90, 526, COLOR_TEXT_DIM);
+            draw_text(scene, "Buscando Actualizaciones en GitHub...", fontCardTitle, CARD_X + 90, 300, COLOR_WHITE);
+            draw_text(scene, "Conectando con github.com/toniigibertt/AnyController-PS4/releases...", fontCardDesc, CARD_X + 90, 330, COLOR_TEXT_DIM);
+            draw_text(scene, "Verificando el último PKG publicado...", fontCardDesc, CARD_X + 90, 360, COLOR_TEXT_DIM);
         } else {
-            draw_text(scene, "Servicio de Actualizacion en Linea (GitHub)", fontCardTitle, CARD_X + 90, 468, COLOR_WHITE);
-            draw_text(scene, updater ? updater->get_status_message() : "Modo sin conexion (red local)", fontCardDesc, CARD_X + 90, 498, COLOR_TEXT_DIM);
-            draw_text(scene, "GitHub: https://github.com/toniigibertt/AnyController-PS4", fontCardDesc, CARD_X + 90, 526, COLOR_TEXT_DIM);
+            draw_text(scene, "Servicio de Actualización en Línea (GitHub)", fontCardTitle, CARD_X + 90, 300, COLOR_WHITE);
+            draw_text(scene, updater ? updater->get_status_message() : "Modo sin conexión", fontCardDesc, CARD_X + 90, 330, COLOR_TEXT_DIM);
+            draw_text(scene, "Pulsa [EQUIS (X)] para comprobar GitHub Releases manualmente.", fontCardDesc, CARD_X + 90, 360, COLOR_TEXT_DIM);
         }
 
-        // Info Card 3: Supported Controllers & Connectivity
-        draw_rounded_rect(scene, CARD_X, 582, CARD_W, 120, 12, COLOR_CARD_BG);
-        draw_rounded_outline(scene, CARD_X, 582, CARD_W, 120, 12, COLOR_CARD_BORDER, 1);
-        draw_image(scene, iconMode, CARD_X + 24, 600);
-        draw_text(scene, "Multijugador Local (1-4 Mandos) y Carga USB-C", fontCardTitle, CARD_X + 90, 614, COLOR_WHITE);
-        draw_text(scene, "- Al encender un 2º DualSense se abre automáticamente el selector de perfil de PS4.", fontCardDesc, CARD_X + 90, 642, COLOR_TEXT_DIM);
-        draw_text(scene, "- Carga USB-C a máxima potencia mientras juegas por Bluetooth con telemetría exacta.", fontCardDesc, CARD_X + 90, 670, COLOR_TEXT_DIM);
+        // Card 3: Per-Controller Memory & Multi-DualSense Guide (Y = 408..564, H = 156)
+        draw_rounded_rect(scene, CARD_X, 408, INFO_W, 156, 12, COLOR_CARD_BG);
+        draw_rounded_outline(scene, CARD_X, 408, INFO_W, 156, 12, COLOR_BLUE_MAIN, 1);
+        draw_image(scene, iconMode, CARD_X + 24, 428);
+        draw_text(scene, "Configuración Independiente y Memoria Persistente por Mando", fontCardTitle, CARD_X + 90, 442, COLOR_WHITE);
+        draw_text(scene, "• Al cambiar entre mandos con [L3], cada DualSense se guarda por su MAC Bluetooth (ds_mac_XXXX.ini).", fontCardDesc, CARD_X + 90, 474, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "• Cada DualShock 4 nativo guarda su perfil por ranura de jugador (ds4_slot_1.ini .. ds4_slot_4.ini).", fontCardDesc, CARD_X + 90, 504, COLOR_WHITE);
+        draw_text(scene, "• Si lo conectas mañana o tras reiniciar PS4, el demonio ANYCONTROLLER recuerda exactamente sus colores y drift.", fontCardDesc, CARD_X + 90, 534, COLOR_TEXT_DIM);
 
-        // Info Card 4: Modes & Shortcuts
-        draw_rounded_rect(scene, CARD_X, 718, CARD_W, 126, 12, COLOR_CARD_BG);
-        draw_rounded_outline(scene, CARD_X, 718, CARD_W, 126, 12, COLOR_CARD_BORDER, 1);
-        draw_image(scene, iconGuide, CARD_X + 24, 736);
-        draw_text(scene, "Atajos del Mando Virtual e Integración en PS4", fontCardTitle, CARD_X + 90, 750, COLOR_WHITE);
-        draw_text(scene, "- Create + Izquierda (o [TRIÁNGULO] en pestaña DualSense): Abrir Selector de Perfil PS4.", fontCardDesc, CARD_X + 90, 778, COLOR_BLUE_BRIGHT);
-        draw_text(scene, "- Create + Options o Arriba = Clic Touchpad | Create + Abajo = Botón PS nativo.", fontCardDesc, CARD_X + 90, 806, COLOR_TEXT_DIM);
+        // Card 4: PS4 DualSense Integration & Shortcuts (Y = 576..712, H = 136)
+        draw_rounded_rect(scene, CARD_X, 576, INFO_W, 136, 12, COLOR_CARD_BG);
+        draw_rounded_outline(scene, CARD_X, 576, INFO_W, 136, 12, COLOR_CARD_BORDER, 1);
+        draw_image(scene, iconGuide, CARD_X + 24, 594);
+        draw_text(scene, "Multijugador DualSense PS5 y Atajos del Sistema PS4", fontCardTitle, CARD_X + 90, 610, COLOR_WHITE);
+        draw_text(scene, "• Botón PS directo independiente por jugador en cada DualSense (sin mover el perfil del Jugador 1).", fontCardDesc, CARD_X + 90, 642, COLOR_WHITE);
+        draw_text(scene, "• [TRIÁNGULO] en pestaña DualSense o (Create + Izquierda): abrir selector '¿Quién está usando este mando?'.", fontCardDesc, CARD_X + 90, 672, COLOR_BLUE_BRIGHT);
 
-        // 5. Footer for Info
-        scene->DrawRectangle(60, 865, 1800, 2, COLOR_DIVIDER);
+        // Card 5: Bottom Tips Strip (Y = 724..846, H = 122)
+        draw_rounded_rect(scene, CARD_X, 724, INFO_W, 122, 12, Color{ 10, 18, 34 });
+        draw_rounded_outline(scene, CARD_X, 724, INFO_W, 122, 12, COLOR_CARD_BORDER, 1);
+        draw_rounded_rect(scene, CARD_X, 724, 6, 122, 3, COLOR_BLUE_MAIN);
+        draw_text(scene, "HERENCIA AUTOMÁTICA Y CARGA USB-C", fontFooter, CARD_X + 24, 754, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "Cualquier mando nuevo al que no le crees un perfil propio hereda al instante los Ajustes Globales.", fontCardDesc, CARD_X + 24, 786, COLOR_WHITE);
+        draw_text(scene, "Si quieres que un mando personalizado vuelva a copiar el perfil Global, selecciónalo con [L3] y pulsa [R3].", fontCardDesc, CARD_X + 24, 818, Color{ 0, 255, 160 });
 
-        draw_image(scene, iconInfo, 60, 890);
-        draw_text(scene, "Informacion y Ayuda", fontCardTitle, 120, 912, COLOR_WHITE);
-        draw_text(scene, "Pulsa [L1] / [R1] para cambiar entre pestanas", fontFooter, 120, 938, COLOR_TEXT_DIM);
+        // Footer for Info (Zero conflicting button bindings!)
+        scene->DrawRectangle(56, 862, 1808, 2, COLOR_DIVIDER);
+        draw_image(scene, iconInfo, 56, 888);
+        draw_text(scene, "Sistema, Red y Acerca de", fontCardTitle, 116, 910, COLOR_WHITE);
+        draw_text(scene, "Motor ANYCONTROLLER v" ONEFAMILY_VERSION_STRING " • Repositorio oficial github.com/toniigibertt/AnyController-PS4", fontFooter, 116, 936, COLOR_TEXT_DIM);
 
-        // Navigation Hints
-        draw_image(scene, btnTriangle, 980, 897);
-        draw_text(scene, (upState == UPDATER_UPDATE_AVAILABLE) ? "Descargar PKG" : "Buscar Update", fontFooter, 1025, 922, Color{ 0, 255, 150 });
+        draw_image(scene, btnCross, 1020, 895);
+        draw_text(scene, (upState == UPDATER_UPDATE_AVAILABLE) ? "Descargar PKG" : "Buscar Update", fontFooter, 1065, 920, Color{ 0, 255, 150 });
 
-        draw_image(scene, btnSquare, 1230, 897);
-        draw_text(scene, "Reinstalar Demonio", fontFooter, 1275, 922, COLOR_BLUE_BRIGHT);
+        draw_image(scene, btnSquare, 1255, 895);
+        draw_text(scene, "Reinstalar Demonio", fontFooter, 1300, 920, COLOR_BLUE_BRIGHT);
 
-        draw_image(scene, btnL1, 1525, 901);
-        draw_text(scene, "Pestanas", fontFooter, 1580, 922, COLOR_TEXT_DIM);
+        draw_image(scene, btnCircle, 1515, 895);
+        draw_text(scene, "Ajustes", fontFooter, 1560, 920, COLOR_TEXT_DIM);
 
-        draw_image(scene, btnOptions, 1700, 900);
-        draw_text(scene, "Salir", fontFooter, 1780, 922, COLOR_TEXT_DIM);
+        draw_image(scene, btnOptions, 1690, 898);
+        draw_text(scene, "Salir", fontFooter, 1770, 920, COLOR_TEXT_DIM);
     }
 
-    // 6. Toast Notification if active
+    // 6. Floating Top Toast Notification (never overlaps cards, footer, or guide box!)
     if (toastFrames > 0) {
-        int boxW = 860;
-        int boxH = 46;
+        int boxW = 1040;
+        int boxH = 38;
         int boxX = (1920 - boxW) / 2;
-        int boxY = 804;
+        int boxY = 6;
 
         draw_rounded_rect(scene, boxX, boxY, boxW, boxH, 8, COLOR_TOAST_BG);
         draw_rounded_outline(scene, boxX, boxY, boxW, boxH, 8, COLOR_TOAST_BORDER, 2);
-        const char* msg = (toastMsg && toastMsg[0]) ? toastMsg : "Ajustes guardados en /data/anycontroller/anycontroller.ini";
-        draw_text_centered(scene, msg, fontCardTitle, 960, boxY + 31, COLOR_BLUE_BRIGHT);
+        const char* msg = (toastMsg && toastMsg[0]) ? toastMsg : "Ajustes guardados en /data/anycontroller/";
+        draw_text_centered(scene, msg, fontCardDesc, 960, boxY + 25, COLOR_BLUE_BRIGHT);
     }
 }
 
@@ -874,326 +936,269 @@ void UI::render_wizard(Scene2D* scene, const InstallResult& res, int frameID) {
     draw_text(scene, "Abrir Control Center", fontFooter, 1545, 922, COLOR_BLUE_BRIGHT);
 }
 
-void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester, bool dualsenseConnected) {
+void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester, bool dualsenseConnected, const char* targetShortLabel) {
     if (!scene) return;
 
-    char buf[128];
+    char buf[160];
     int deadzone_val = ConfigManager::DEADZONE_VALUES[cfg.deadzone_index];
     int thresh_val = ConfigManager::TRIGGER_VALUES[cfg.trigger_index];
 
+    bool showDualSense = (tester.testerModelOverride == 1) ? true :
+                         ((tester.testerModelOverride == 2) ? false : dualsenseConnected);
+
     // ========================================================
-    // HEADER AREA: INFO CARD & TEST MODE R3 BADGE
+    // TOP BAR (Y = 132..204, H = 72)
     // ========================================================
-    draw_rounded_rect(scene, CARD_X, 135, 1060, 76, 10, COLOR_CARD_BG);
-    draw_rounded_outline(scene, CARD_X, 135, 1060, 76, 10, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconMode, CARD_X + 20, 135 + (76 - iconMode.height) / 2);
+    draw_rounded_rect(scene, CARD_X, 132, 1060, 72, 10, COLOR_CARD_BG);
+    draw_rounded_outline(scene, CARD_X, 132, 1060, 72, 10, COLOR_CARD_BORDER, 1);
+    draw_image(scene, iconMode, CARD_X + 20, 148);
+    draw_text(scene, "Laboratorio Original DualSense PS5 y DualShock 4", fontCardTitle, CARD_X + 76, 162, COLOR_WHITE);
+    draw_text(scene, "Visor 2D fiel de los dos mandos originales • Iluminación en tiempo real y calibración", fontCardDesc, CARD_X + 76, 190, COLOR_TEXT_DIM);
 
-    draw_text(scene, "Laboratorio 3D de Entradas en Hardware Real", fontCardTitle, CARD_X + 75, 164, COLOR_WHITE);
-    draw_text(scene, "Visor 3D animado DualSense / DualShock 4, telemetría de palancas y vibración", fontCardDesc, CARD_X + 75, 194, COLOR_TEXT_DIM);
-
-    int testCardX = CARD_X + 1080;
-    int testCardW = 360;
-    int testCardH = 76;
-
+    int testCardX = CARD_X + 1076;
+    int testCardW = 364;
+    int testCardH = 72;
     if (tester.testMode) {
-        draw_rounded_rect(scene, testCardX, 135, testCardW, testCardH, 10, Color{ 15, 60, 40 });
-        draw_rounded_outline(scene, testCardX, 135, testCardW, testCardH, 10, Color{ 0, 255, 150 }, 2);
-        draw_image(scene, btnR3, testCardX + 16, 135 + (testCardH - btnR3.height) / 2);
-        draw_text(scene, "MODO PRUEBA: ACTIVO", fontCardTitle, testCardX + 60, 164, Color{ 0, 255, 150 });
-        draw_text(scene, "Pulsa R3 para volver", fontCardDesc, testCardX + 60, 194, COLOR_WHITE);
+        draw_rounded_rect(scene, testCardX, 132, testCardW, testCardH, 10, Color{ 15, 60, 40 });
+        draw_rounded_outline(scene, testCardX, 132, testCardW, testCardH, 10, Color{ 0, 255, 150 }, 2);
+        draw_image(scene, btnOptions, testCardX + 14, 152);
+        draw_text(scene, "MODO PRUEBA: ACTIVO", fontCardTitle, testCardX + 76, 162, Color{ 0, 255, 150 });
+        draw_text(scene, "Mantén OPTIONS o pulsa L1+R1", fontCardDesc, testCardX + 76, 190, COLOR_WHITE);
     } else {
-        draw_rounded_rect(scene, testCardX, 135, testCardW, testCardH, 10, Color{ 14, 24, 38 });
-        draw_rounded_outline(scene, testCardX, 135, testCardW, testCardH, 10, COLOR_CARD_BORDER, 1);
-        draw_image(scene, btnR3, testCardX + 16, 135 + (testCardH - btnR3.height) / 2);
-        draw_text(scene, "MODO PRUEBA: APAGADO", fontCardTitle, testCardX + 60, 164, COLOR_WHITE);
-        draw_text(scene, "Pulsa R3 para aislar entradas", fontCardDesc, testCardX + 60, 194, COLOR_BLUE_BRIGHT);
+        draw_rounded_rect(scene, testCardX, 132, testCardW, testCardH, 10, Color{ 14, 24, 38 });
+        draw_rounded_outline(scene, testCardX, 132, testCardW, testCardH, 10, COLOR_CARD_BORDER, 1);
+        draw_image(scene, btnCross, testCardX + 16, 150);
+        draw_text(scene, "NAVEGACIÓN LIBRE", fontCardTitle, testCardX + 62, 162, COLOR_WHITE);
+        draw_text(scene, "Usa Arriba/Abajo en el panel", fontCardDesc, testCardX + 62, 190, COLOR_BLUE_BRIGHT);
     }
 
     // ========================================================
-    // CONTROLLER SLOT SELECTION BAR (Player 1..4)
+    // LEFT COLUMN (X = 410..1090, W = 680)
+    //   1) Interactive 5-Row Control Menu (Y = 214..438, H = 224)
+    //   2) Stick L3 & R3 Cards (Y = 448..662, H = 214)
+    //   3) Triggers L2/L1 & R1/R2 Card (Y = 672..846, H = 174)
     // ========================================================
-    int barX = CARD_X;
-    int barY = 222;
+    const int LCOL_X = CARD_X;
+    const int LCOL_W = 680;
 
-    draw_image(scene, btnL2, barX + 6, barY + 9);
+    // --- 1) Interactive Control Menu (Zero ambiguous button overlaps!) ---
+    draw_rounded_rect(scene, LCOL_X, 214, LCOL_W, 224, 12, COLOR_CARD_BG);
+    draw_rounded_outline(scene, LCOL_X, 214, LCOL_W, 224, 12, tester.testMode ? Color{ 0, 255, 150 } : COLOR_CARD_BORDER, 1);
 
-    int pillsStartX = barX + 46;
-    int pillW = 220;
-    int pillGap = 12;
-    for (int s = 0; s < 4; s++) {
-        int px = pillsStartX + s * (pillW + pillGap);
-        int py = barY + 4;
-        int ph = 38;
-        bool isSel = (s == tester.selectedSlot);
-        bool isConn = tester.slotConnected[s];
+    const char* slotConnTag = tester.slotConnected[tester.selectedSlot] ? "Conectado" : "Desconectado";
+    static const char* modelModeLabels[3] = { "Automático", "PS5 DualSense", "PS4 DualShock 4" };
 
-        Color bg = isSel ? COLOR_SIDEBAR_BLUE : COLOR_CARD_BG;
-        Color border = isSel ? COLOR_BLUE_BRIGHT : COLOR_CARD_BORDER;
-        draw_rounded_rect(scene, px, py, pillW, ph, 8, bg);
-        draw_rounded_outline(scene, px, py, pillW, ph, 8, border, isSel ? 2 : 1);
+    for (int r = 0; r < 5; r++) {
+        int ry = 224 + r * 41;
+        bool isSel = (!tester.testMode && tester.testerMenuRow == r);
+        draw_rounded_rect(scene, LCOL_X + 12, ry, LCOL_W - 24, 36, 7, isSel ? Color{ 18, 42, 76 } : Color{ 10, 16, 28 });
+        if (isSel) {
+            draw_rounded_outline(scene, LCOL_X + 12, ry, LCOL_W - 24, 36, 7, COLOR_BLUE_BRIGHT, 1);
+            draw_rounded_rect(scene, LCOL_X + 12, ry + 6, 4, 24, 2, COLOR_BLUE_BRIGHT);
+        }
 
-        Color dotColor = isConn ? Color{ 0, 255, 150 } : Color{ 80, 95, 110 };
-        draw_circle(scene, px + 16, py + 19, 5, dotColor);
-
-        char slotLabel[48];
-        snprintf(slotLabel, sizeof(slotLabel), "Jugador %d %s", s + 1, isConn ? "(Activo)" : "(Inactivo)");
-        draw_text(scene, slotLabel, fontSubtitle, px + 30, py + 26, isSel ? COLOR_WHITE : (isConn ? Color{ 200, 220, 240 } : COLOR_TEXT_DIM));
+        if (r == 0) {
+            snprintf(buf, sizeof(buf), "Mando a probar: Jugador %d (%s)", tester.selectedSlot + 1, slotConnTag);
+            draw_text(scene, buf, fontCardDesc, LCOL_X + 26, ry + 24, isSel ? COLOR_WHITE : COLOR_TEXT_DIM);
+            draw_text(scene, "< Izq / Der >", fontFooter, LCOL_X + 545, ry + 24, isSel ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
+        } else if (r == 1) {
+            int mv = (tester.testerModelOverride >= 0 && tester.testerModelOverride < 3) ? tester.testerModelOverride : 0;
+            snprintf(buf, sizeof(buf), "Mando Visual 2D: %s", modelModeLabels[mv]);
+            draw_text(scene, buf, fontCardDesc, LCOL_X + 26, ry + 24, isSel ? COLOR_WHITE : COLOR_TEXT_DIM);
+            draw_text(scene, "< Izq / Der >", fontFooter, LCOL_X + 545, ry + 24, isSel ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
+        } else if (r == 2) {
+            draw_text(scene, "Modo Prueba Libre (L3/R3/Cruceta sin salir)", fontCardDesc, LCOL_X + 26, ry + 24, isSel ? COLOR_WHITE : COLOR_TEXT_DIM);
+            draw_text(scene, tester.testMode ? "[ACTIVO]" : "[X] Activar", fontFooter, LCOL_X + 545, ry + 24,
+                      tester.testMode ? Color{ 0, 255, 160 } : (isSel ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM));
+        } else if (r == 3) {
+            const char* vibState = (tester.rumblePhase == 1) ? "Vibrando L..." :
+                                   (tester.rumblePhase == 2) ? "Vibrando R..." :
+                                   (tester.rumblePhase == 3) ? "Ambos 100%" : "[X] Probar";
+            draw_text(scene, "Probar vibración SOLO en este mando", fontCardDesc, LCOL_X + 26, ry + 24, isSel ? COLOR_WHITE : COLOR_TEXT_DIM);
+            draw_text(scene, vibState, fontFooter, LCOL_X + 545, ry + 24,
+                      (tester.rumblePhase != 0) ? Color{ 0, 255, 160 } : (isSel ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM));
+        } else {
+            if (tester.calib.active) {
+                snprintf(buf, sizeof(buf), "Analizando drift (%d%% • ruido max %d)",
+                         (tester.calib.currentFrame * 100) / tester.calib.totalFrames, tester.calib.maxNoise);
+                draw_text(scene, buf, fontCardDesc, LCOL_X + 26, ry + 24, COLOR_BLUE_BRIGHT);
+                draw_text(scene, "Suelta sticks", fontFooter, LCOL_X + 545, ry + 24, Color{ 0, 255, 160 });
+            } else if (tester.calib.completed) {
+                snprintf(buf, sizeof(buf), "Drift detectado: %d -> Zona muerta sugerida: %s",
+                         tester.calib.maxNoise, ConfigManager::DEADZONE_OPTIONS[tester.calib.suggestedIndex].c_str());
+                draw_text(scene, buf, fontCardDesc, LCOL_X + 26, ry + 24, Color{ 0, 255, 160 });
+                draw_text(scene, "[X] Aplicar", fontFooter, LCOL_X + 545, ry + 24, Color{ 0, 255, 160 });
+            } else {
+                draw_text(scene, "Calibrar deriva / anti-drift (3 segundos)", fontCardDesc, LCOL_X + 26, ry + 24, isSel ? COLOR_WHITE : COLOR_TEXT_DIM);
+                draw_text(scene, "[X] Iniciar", fontFooter, LCOL_X + 545, ry + 24, isSel ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
+            }
+        }
     }
 
-    int r2X = pillsStartX + 4 * pillW + 3 * pillGap + 10;
-    draw_image(scene, btnR2, r2X, barY + 9);
-    if (tester.testMode) {
-        draw_text(scene, "Cambio bloqueado (Modo Prueba)", fontCardDesc, r2X + 42, barY + 27, Color{ 0, 255, 150 });
-    } else {
-        draw_text(scene, "[L2/R2] o [IZQ/DER]: Cambiar Jugador", fontCardDesc, r2X + 42, barY + 27, COLOR_TEXT_DIM);
-    }
-
-    // Check if selected controller slot is connected
-    if (!padData.connected) {
-        int warnX = CARD_X;
-        int warnY = 280;
-        int warnW = 1440;
-        int warnH = 560;
-
-        draw_rounded_rect(scene, warnX, warnY, warnW, warnH, 12, Color{ 20, 26, 42 });
-        draw_rounded_outline(scene, warnX, warnY, warnW, warnH, 12, Color{ 0, 112, 220 }, 2);
-
-        draw_image(scene, iconInfo, warnX + 40, warnY + 42);
-        char noPadTitle[64];
-        snprintf(noPadTitle, sizeof(noPadTitle), "Ranura %d (Jugador %d): Desconectado", tester.selectedSlot + 1, tester.selectedSlot + 1);
-        draw_text(scene, noPadTitle, fontCardTitle, warnX + 105, warnY + 68, COLOR_WHITE);
-
-        int textY = warnY + 130;
-        draw_text(scene, "El Laboratorio opera en modo hardware puro para aislar entradas por ranura de jugador.",
-                  fontCardDesc, warnX + 40, textY, COLOR_TEXT_DIM);
-        textY += 40;
-        snprintf(buf, sizeof(buf), "No hay ningún mando activo actualmente en la Ranura %d (Jugador %d).", tester.selectedSlot + 1, tester.selectedSlot + 1);
-        draw_text(scene, buf, fontCardDesc, warnX + 40, textY, COLOR_WHITE);
-        textY += 40;
-        draw_text(scene, "Pulsa [L2] / [R2] o [IZQ] / [DER] para cambiar a otra ranura de jugador,",
-                  fontCardDesc, warnX + 40, textY, COLOR_BLUE_BRIGHT);
-        textY += 36;
-        draw_text(scene, "o conecta un mando DualSense (Bluetooth) o USB para asignarlo a esta ranura.",
-                  fontCardDesc, warnX + 40, textY, COLOR_TEXT_DIM);
-
-        scene->DrawRectangle(60, 865, 1800, 2, COLOR_DIVIDER);
-        draw_image(scene, iconMode, 60, 890);
-        snprintf(buf, sizeof(buf), "Laboratorio 3D - Ranura %d (Jugador %d)", tester.selectedSlot + 1, tester.selectedSlot + 1);
-        draw_text(scene, buf, fontCardTitle, 120, 912, COLOR_WHITE);
-        draw_text(scene, "Esperando conexión de mando en esta ranura...", fontFooter, 120, 938, Color{ 220, 80, 60 });
-
-        draw_image(scene, btnArrows, 1500, 901);
-        draw_text(scene, "Cambiar Ranura", fontFooter, 1545, 922, COLOR_BLUE_BRIGHT);
-
-        draw_image(scene, btnOptions, 1680, 900);
-        draw_text(scene, "Salir", fontFooter, 1760, 922, COLOR_TEXT_DIM);
-        return;
-    }
-
-    // ========================================================
-    // LEFT TELEMETRY COLUMN (X = 410..1100, W = 690)
-    // ========================================================
+    // --- 2) L3 & R3 Stick Telemetry Cards ---
     int stickR = 46;
-    int colCardW = 336;
-    int lsX = CARD_X;      // 410
-    int rsX = CARD_X + 354; // 764
-    int lsY = 280;
-    int lsH = 205;
+    int colCardW = 332;
+    int lsX = LCOL_X;
+    int rsX = LCOL_X + 348;
+    int lsY = 448;
+    int lsH = 214;
 
-    // --- Left Stick Card ---
-    draw_rounded_rect(scene, lsX, lsY, colCardW, lsH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, lsX, lsY, colCardW, lsH, 12, COLOR_CARD_BORDER, 1);
-    draw_text(scene, "Palanca L3", fontCardTitle, lsX + 18, lsY + 34, COLOR_WHITE);
-
-    int lcx = lsX + 70;
-    int lcy = lsY + 124;
-    draw_circle_outline(scene, lcx, lcy, stickR, COLOR_CARD_BORDER, 2);
-    scene->DrawRectangle(lcx - stickR, lcy, 2 * stickR, 1, COLOR_DIVIDER);
-    scene->DrawRectangle(lcx, lcy - stickR, 1, 2 * stickR, COLOR_DIVIDER);
-
-    int ldz_r = (deadzone_val * stickR) / 128;
-    if (ldz_r > 0) draw_circle_outline(scene, lcx, lcy, ldz_r, COLOR_BLUE_GLOW, 1);
-
-    int rawLX = (int)padData.leftStick.x;
-    int rawLY = (int)padData.leftStick.y;
-    int lDevX = rawLX - 128;
-    int lDevY = rawLY - 128;
-    int lsXPos = lcx + (lDevX * stickR) / 128;
-    int lsYPos = lcy + (lDevY * stickR) / 128;
-    int lDist = (int)sqrt((double)(lDevX * lDevX + lDevY * lDevY));
-    bool lInDeadzone = (lDist <= deadzone_val);
-    bool l3Pressed = (padData.buttons & ORBIS_PAD_BUTTON_L3) != 0;
-
-    draw_circle(scene, lsXPos, lsYPos, 6, l3Pressed ? Color{ 255, 190, 45 } : (lInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN));
-    draw_circle_outline(scene, lsXPos, lsYPos, 6, COLOR_WHITE, 1);
-
-    int lTextX = lsX + 134;
-    snprintf(buf, sizeof(buf), "X:%d (%+d%%)", rawLX, (lDevX * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, lTextX, lsY + 80, COLOR_WHITE);
-    snprintf(buf, sizeof(buf), "Y:%d (%+d%%)", rawLY, (lDevY * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, lTextX, lsY + 108, COLOR_WHITE);
-    snprintf(buf, sizeof(buf), "ZM: %s", ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str());
-    draw_text(scene, buf, fontCardDesc, lTextX, lsY + 136, COLOR_TEXT_DIM);
-    draw_text(scene, l3Pressed ? "L3: PULSADO" : (lInDeadzone ? "Estado: Reposo" : "Estado: Activo"),
-              fontCardDesc, lTextX, lsY + 166, (l3Pressed || !lInDeadzone) ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
-
-    // --- Right Stick Card ---
-    draw_rounded_rect(scene, rsX, lsY, colCardW, lsH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, rsX, lsY, colCardW, lsH, 12, COLOR_CARD_BORDER, 1);
-    draw_text(scene, "Palanca R3", fontCardTitle, rsX + 18, lsY + 34, COLOR_WHITE);
-
-    int rcx = rsX + 70;
-    int rcy = lsY + 124;
-    draw_circle_outline(scene, rcx, rcy, stickR, COLOR_CARD_BORDER, 2);
-    scene->DrawRectangle(rcx - stickR, rcy, 2 * stickR, 1, COLOR_DIVIDER);
-    scene->DrawRectangle(rcx, rcy - stickR, 1, 2 * stickR, COLOR_DIVIDER);
-
-    int rdz_r = (deadzone_val * stickR) / 128;
-    if (rdz_r > 0) draw_circle_outline(scene, rcx, rcy, rdz_r, COLOR_BLUE_GLOW, 1);
-
-    int rawRX = (int)padData.rightStick.x;
-    int rawRY = (int)padData.rightStick.y;
-    int rDevX = rawRX - 128;
-    int rDevY = rawRY - 128;
-    int rsXPos = rcx + (rDevX * stickR) / 128;
-    int rsYPos = rcy + (rDevY * stickR) / 128;
-    int rDist = (int)sqrt((double)(rDevX * rDevX + rDevY * rDevY));
-    bool rInDeadzone = (rDist <= deadzone_val);
-    bool r3Pressed = (padData.buttons & ORBIS_PAD_BUTTON_R3) != 0;
-
-    draw_circle(scene, rsXPos, rsYPos, 6, r3Pressed ? Color{ 255, 190, 45 } : (rInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN));
-    draw_circle_outline(scene, rsXPos, rsYPos, 6, COLOR_WHITE, 1);
-
-    int rTextX = rsX + 134;
-    snprintf(buf, sizeof(buf), "X:%d (%+d%%)", rawRX, (rDevX * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, rTextX, lsY + 80, COLOR_WHITE);
-    snprintf(buf, sizeof(buf), "Y:%d (%+d%%)", rawRY, (rDevY * 100) / 128);
-    draw_text(scene, buf, fontCardDesc, rTextX, lsY + 108, COLOR_WHITE);
-    snprintf(buf, sizeof(buf), "ZM: %s", ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str());
-    draw_text(scene, buf, fontCardDesc, rTextX, lsY + 136, COLOR_TEXT_DIM);
-    draw_text(scene, r3Pressed ? "R3: PULSADO" : (rInDeadzone ? "Estado: Reposo" : "Estado: Activo"),
-              fontCardDesc, rTextX, lsY + 166, (r3Pressed || !rInDeadzone) ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
-
-    // --- Row 2: Triggers & Bumpers (Y = 497, H = 135, W = 690) ---
-    int trigX = CARD_X;
-    int trigY = 497;
-    int trigW = 690;
-    int trigH = 135;
-
-    draw_rounded_rect(scene, trigX, trigY, trigW, trigH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, trigX, trigY, trigW, trigH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconSwap, trigX + 18, trigY + 14);
-    draw_text(scene, "Gatillos Analógicos y Protectores", fontCardTitle, trigX + 70, trigY + 36, COLOR_WHITE);
-
-    int rawLT = (int)padData.analogButtons.l2;
-    bool l2Btn = (padData.buttons & ORBIS_PAD_BUTTON_L2) != 0;
-    bool lbBtn = (padData.buttons & ORBIS_PAD_BUTTON_L1) != 0;
-
-    int ltBarX = trigX + 20;
-    int ltBarY = trigY + 90;
-    int ltBarW = 220;
-    int ltBarH = 18;
-    snprintf(buf, sizeof(buf), "L2: %d/255 (%d%%)", rawLT, (rawLT * 100) / 255);
-    draw_text(scene, buf, fontCardDesc, ltBarX, trigY + 76, l2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
-    draw_rounded_rect(scene, ltBarX, ltBarY, ltBarW, ltBarH, 4, Color{ 18, 30, 48 });
-    int ltFillW = (rawLT * ltBarW) / 255;
-    if (ltFillW > 0) draw_rounded_rect(scene, ltBarX, ltBarY, ltFillW, ltBarH, 4, l2Btn ? COLOR_BLUE_MAIN : Color{ 15, 70, 140 });
-    scene->DrawRectangle(ltBarX + (thresh_val * ltBarW) / 255, ltBarY - 3, 2, ltBarH + 6, COLOR_WHITE);
-    draw_btn_badge(scene, ltBarX + ltBarW + 14, trigY + 78, 72, 32, "L1", lbBtn);
-
-    int rawRT = (int)padData.analogButtons.r2;
-    bool r2Btn = (padData.buttons & ORBIS_PAD_BUTTON_R2) != 0;
-    bool rbBtn = (padData.buttons & ORBIS_PAD_BUTTON_R1) != 0;
-
-    int rtBarX = trigX + 356;
-    int rtBarY = trigY + 90;
-    int rtBarW = 220;
-    int rtBarH = 18;
-    snprintf(buf, sizeof(buf), "R2: %d/255 (%d%%)", rawRT, (rawRT * 100) / 255);
-    draw_text(scene, buf, fontCardDesc, rtBarX, trigY + 76, r2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
-    draw_rounded_rect(scene, rtBarX, rtBarY, rtBarW, rtBarH, 4, Color{ 18, 30, 48 });
-    int rtFillW = (rawRT * rtBarW) / 255;
-    if (rtFillW > 0) draw_rounded_rect(scene, rtBarX, rtBarY, rtFillW, rtBarH, 4, r2Btn ? COLOR_BLUE_MAIN : Color{ 15, 70, 140 });
-    scene->DrawRectangle(rtBarX + (thresh_val * rtBarW) / 255, rtBarY - 3, 2, rtBarH + 6, COLOR_WHITE);
-    draw_btn_badge(scene, rtBarX + rtBarW + 14, trigY + 78, 72, 32, "R1", rbBtn);
-
-    // --- Row 3: Vibration Test & Drift Calibration (Y = 644, H = 206) ---
-    int vibY = 644;
-    int vibH = 206;
-
-    // Left: Vibration
-    draw_rounded_rect(scene, lsX, vibY, colCardW, vibH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, lsX, vibY, colCardW, vibH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconRumble, lsX + 18, vibY + 14);
-    draw_text(scene, "Motores Vibración", fontCardTitle, lsX + 68, vibY + 36, COLOR_WHITE);
-    draw_image(scene, btnSquare, lsX + 18, vibY + 72);
-    draw_text(scene, "Probar Motores Hápticos", fontCardDesc, lsX + 64, vibY + 94, COLOR_WHITE);
-    if (tester.rumblePhase == 0) {
-        draw_text(scene, "Pulsa [Cuadrado] para probar", fontCardDesc, lsX + 18, vibY + 140, COLOR_TEXT_DIM);
-        draw_text(scene, "L (pesado) + R (ligero) en 3D", fontCardDesc, lsX + 18, vibY + 168, COLOR_TEXT_DIM);
-    } else if (tester.rumblePhase == 1) {
-        draw_text(scene, "[ACTIVO] Motor Pesado (L)", fontCardDesc, lsX + 18, vibY + 148, COLOR_BLUE_BRIGHT);
-    } else if (tester.rumblePhase == 2) {
-        draw_text(scene, "[ACTIVO] Motor Ligero (R)", fontCardDesc, lsX + 18, vibY + 148, COLOR_BLUE_BRIGHT);
+    if (!padData.connected) {
+        draw_rounded_rect(scene, LCOL_X, 448, LCOL_W, 398, 12, Color{ 16, 22, 38 });
+        draw_rounded_outline(scene, LCOL_X, 448, LCOL_W, 398, 12, COLOR_BLUE_MAIN, 1);
+        snprintf(buf, sizeof(buf), "Jugador %d (Ranura %d): Desconectado", tester.selectedSlot + 1, tester.selectedSlot + 1);
+        draw_text(scene, buf, fontCardTitle, LCOL_X + 30, 520, COLOR_WHITE);
+        draw_text(scene, "No hay ningún mando físico en esta ranura.", fontCardDesc, LCOL_X + 30, 560, COLOR_TEXT_DIM);
+        draw_text(scene, "Usa [Izquierda / Derecha] arriba para cambiar al mando conectado,", fontCardDesc, LCOL_X + 30, 600, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "o pulsa cualquier botón del mando que quieras conectar en este slot.", fontCardDesc, LCOL_X + 30, 634, COLOR_TEXT_DIM);
     } else {
-        draw_text(scene, "[ACTIVO] Ambos al 100%", fontCardDesc, lsX + 18, vibY + 148, Color{ 0, 255, 150 });
-    }
+        draw_rounded_rect(scene, lsX, lsY, colCardW, lsH, 12, COLOR_CARD_BG);
+        draw_rounded_outline(scene, lsX, lsY, colCardW, lsH, 12, COLOR_CARD_BORDER, 1);
+        draw_text(scene, "Palanca L3", fontCardTitle, lsX + 18, lsY + 34, COLOR_WHITE);
 
-    // Right: Drift Auto-Calibration
-    draw_rounded_rect(scene, rsX, vibY, colCardW, vibH, 12, COLOR_CARD_BG);
-    draw_rounded_outline(scene, rsX, vibY, colCardW, vibH, 12, COLOR_CARD_BORDER, 1);
-    draw_image(scene, iconDeadzone, rsX + 18, vibY + 14);
-    draw_text(scene, "Calibrar Deriva", fontCardTitle, rsX + 68, vibY + 36, COLOR_WHITE);
+        int lcx = lsX + 68;
+        int lcy = lsY + 128;
+        draw_circle_outline(scene, lcx, lcy, stickR, COLOR_CARD_BORDER, 2);
+        scene->DrawRectangle(lcx - stickR, lcy, 2 * stickR, 1, COLOR_DIVIDER);
+        scene->DrawRectangle(lcx, lcy - stickR, 1, 2 * stickR, COLOR_DIVIDER);
+        int ldz_r = (deadzone_val * stickR) / 128;
+        if (ldz_r > 0) draw_circle_outline(scene, lcx, lcy, ldz_r, COLOR_BLUE_GLOW, 1);
 
-    if (tester.calib.active) {
-        int barW = colCardW - 36;
-        int progressW = (tester.calib.currentFrame * barW) / tester.calib.totalFrames;
-        draw_rounded_rect(scene, rsX + 18, vibY + 80, barW, 16, 4, Color{ 18, 30, 48 });
-        draw_rounded_rect(scene, rsX + 18, vibY + 80, progressW, 16, 4, COLOR_BLUE_MAIN);
-        snprintf(buf, sizeof(buf), "Muestreando: %d%% (Ruido %d)",
-                 (tester.calib.currentFrame * 100) / tester.calib.totalFrames, tester.calib.maxNoise);
-        draw_text(scene, buf, fontCardDesc, rsX + 18, vibY + 136, COLOR_BLUE_BRIGHT);
-    } else if (tester.calib.completed) {
-        snprintf(buf, sizeof(buf), "Deriva: %d -> Sugerido: %s",
-                 tester.calib.maxNoise, ConfigManager::DEADZONE_OPTIONS[tester.calib.suggestedIndex].c_str());
-        draw_text(scene, buf, fontCardDesc, rsX + 18, vibY + 86, COLOR_WHITE);
-        draw_image(scene, btnCross, rsX + 18, vibY + 124);
-        draw_text(scene, "Aplicar Zona Muerta", fontCardDesc, rsX + 64, vibY + 146, Color{ 0, 255, 150 });
-    } else {
-        draw_image(scene, btnTriangle, rsX + 18, vibY + 72);
-        draw_text(scene, "Analizar Ruido (3s)", fontCardDesc, rsX + 64, vibY + 94, COLOR_WHITE);
-        draw_text(scene, "Suelta las palancas y pulsa", fontCardDesc, rsX + 18, vibY + 140, COLOR_TEXT_DIM);
-        draw_text(scene, "[Triángulo] para calibrar", fontCardDesc, rsX + 18, vibY + 168, COLOR_TEXT_DIM);
+        int rawLX = (int)padData.leftStick.x;
+        int rawLY = (int)padData.leftStick.y;
+        int lDevX = rawLX - 128;
+        int lDevY = rawLY - 128;
+        int lsXPos = lcx + (lDevX * stickR) / 128;
+        int lsYPos = lcy + (lDevY * stickR) / 128;
+        int lDist = (int)sqrt((double)(lDevX * lDevX + lDevY * lDevY));
+        bool lInDeadzone = (lDist <= deadzone_val);
+        bool l3Pressed = (padData.buttons & ORBIS_PAD_BUTTON_L3) != 0;
+
+        draw_circle(scene, lsXPos, lsYPos, 6, l3Pressed ? Color{ 255, 190, 45 } : (lInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN));
+        draw_circle_outline(scene, lsXPos, lsYPos, 6, COLOR_WHITE, 1);
+
+        int lTextX = lsX + 132;
+        snprintf(buf, sizeof(buf), "X:%d (%+d%%)", rawLX, (lDevX * 100) / 128);
+        draw_text(scene, buf, fontCardDesc, lTextX, lsY + 84, COLOR_WHITE);
+        snprintf(buf, sizeof(buf), "Y:%d (%+d%%)", rawLY, (lDevY * 100) / 128);
+        draw_text(scene, buf, fontCardDesc, lTextX, lsY + 112, COLOR_WHITE);
+        snprintf(buf, sizeof(buf), "ZM: %s", ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str());
+        draw_text(scene, buf, fontCardDesc, lTextX, lsY + 140, COLOR_TEXT_DIM);
+        draw_text(scene, l3Pressed ? "L3: PULSADO" : (lInDeadzone ? "Estado: Reposo" : "Estado: Activo"),
+                  fontCardDesc, lTextX, lsY + 170, (l3Pressed || !lInDeadzone) ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
+
+        // Right Stick Card
+        draw_rounded_rect(scene, rsX, lsY, colCardW, lsH, 12, COLOR_CARD_BG);
+        draw_rounded_outline(scene, rsX, lsY, colCardW, lsH, 12, COLOR_CARD_BORDER, 1);
+        draw_text(scene, "Palanca R3", fontCardTitle, rsX + 18, lsY + 34, COLOR_WHITE);
+
+        int rcx = rsX + 68;
+        int rcy = lsY + 128;
+        draw_circle_outline(scene, rcx, rcy, stickR, COLOR_CARD_BORDER, 2);
+        scene->DrawRectangle(rcx - stickR, rcy, 2 * stickR, 1, COLOR_DIVIDER);
+        scene->DrawRectangle(rcx, rcy - stickR, 1, 2 * stickR, COLOR_DIVIDER);
+        int rdz_r = (deadzone_val * stickR) / 128;
+        if (rdz_r > 0) draw_circle_outline(scene, rcx, rcy, rdz_r, COLOR_BLUE_GLOW, 1);
+
+        int rawRX = (int)padData.rightStick.x;
+        int rawRY = (int)padData.rightStick.y;
+        int rDevX = rawRX - 128;
+        int rDevY = rawRY - 128;
+        int rsXPos = rcx + (rDevX * stickR) / 128;
+        int rsYPos = rcy + (rDevY * stickR) / 128;
+        int rDist = (int)sqrt((double)(rDevX * rDevX + rDevY * rDevY));
+        bool rInDeadzone = (rDist <= deadzone_val);
+        bool r3Pressed = (padData.buttons & ORBIS_PAD_BUTTON_R3) != 0;
+
+        draw_circle(scene, rsXPos, rsYPos, 6, r3Pressed ? Color{ 255, 190, 45 } : (rInDeadzone ? Color{ 40, 80, 130 } : COLOR_BLUE_MAIN));
+        draw_circle_outline(scene, rsXPos, rsYPos, 6, COLOR_WHITE, 1);
+
+        int rTextX = rsX + 132;
+        snprintf(buf, sizeof(buf), "X:%d (%+d%%)", rawRX, (rDevX * 100) / 128);
+        draw_text(scene, buf, fontCardDesc, rTextX, lsY + 84, COLOR_WHITE);
+        snprintf(buf, sizeof(buf), "Y:%d (%+d%%)", rawRY, (rDevY * 100) / 128);
+        draw_text(scene, buf, fontCardDesc, rTextX, lsY + 112, COLOR_WHITE);
+        snprintf(buf, sizeof(buf), "ZM: %s", ConfigManager::DEADZONE_OPTIONS[cfg.deadzone_index].c_str());
+        draw_text(scene, buf, fontCardDesc, rTextX, lsY + 140, COLOR_TEXT_DIM);
+        draw_text(scene, r3Pressed ? "R3: PULSADO" : (rInDeadzone ? "Estado: Reposo" : "Estado: Activo"),
+                  fontCardDesc, rTextX, lsY + 170, (r3Pressed || !rInDeadzone) ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
+
+        // --- 3) Triggers & Bumpers Card ---
+        int trigX = LCOL_X;
+        int trigY = 672;
+        int trigW = LCOL_W;
+        int trigH = 174;
+        draw_rounded_rect(scene, trigX, trigY, trigW, trigH, 12, COLOR_CARD_BG);
+        draw_rounded_outline(scene, trigX, trigY, trigW, trigH, 12, COLOR_CARD_BORDER, 1);
+        draw_image(scene, iconSwap, trigX + 18, trigY + 16);
+        draw_text(scene, "Gatillos L2/R2 y Hombros L1/R1", fontCardTitle, trigX + 70, trigY + 38, COLOR_WHITE);
+
+        int rawLT = (int)padData.analogButtons.l2;
+        bool l2Btn = (padData.buttons & ORBIS_PAD_BUTTON_L2) != 0;
+        bool lbBtn = (padData.buttons & ORBIS_PAD_BUTTON_L1) != 0;
+
+        int ltBarX = trigX + 20;
+        int ltBarY = trigY + 106;
+        int ltBarW = 210;
+        int ltBarH = 18;
+        snprintf(buf, sizeof(buf), "L2: %d/255 (%d%%)", rawLT, (rawLT * 100) / 255);
+        draw_text(scene, buf, fontCardDesc, ltBarX, trigY + 90, l2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
+        draw_rounded_rect(scene, ltBarX, ltBarY, ltBarW, ltBarH, 4, Color{ 18, 30, 48 });
+        int ltFillW = (rawLT * ltBarW) / 255;
+        if (ltFillW > 0) draw_rounded_rect(scene, ltBarX, ltBarY, ltFillW, ltBarH, 4, l2Btn ? COLOR_BLUE_MAIN : Color{ 15, 70, 140 });
+        scene->DrawRectangle(ltBarX + (thresh_val * ltBarW) / 255, ltBarY - 3, 2, ltBarH + 6, COLOR_WHITE);
+        draw_btn_badge(scene, ltBarX + ltBarW + 14, trigY + 94, 72, 32, "L1", lbBtn);
+
+        int rawRT = (int)padData.analogButtons.r2;
+        bool r2Btn = (padData.buttons & ORBIS_PAD_BUTTON_R2) != 0;
+        bool rbBtn = (padData.buttons & ORBIS_PAD_BUTTON_R1) != 0;
+
+        int rtBarX = trigX + 352;
+        int rtBarY = trigY + 106;
+        int rtBarW = 210;
+        int rtBarH = 18;
+        snprintf(buf, sizeof(buf), "R2: %d/255 (%d%%)", rawRT, (rawRT * 100) / 255);
+        draw_text(scene, buf, fontCardDesc, rtBarX, trigY + 90, r2Btn ? COLOR_BLUE_BRIGHT : COLOR_WHITE);
+        draw_rounded_rect(scene, rtBarX, rtBarY, rtBarW, rtBarH, 4, Color{ 18, 30, 48 });
+        int rtFillW = (rawRT * rtBarW) / 255;
+        if (rtFillW > 0) draw_rounded_rect(scene, rtBarX, rtBarY, rtFillW, rtBarH, 4, r2Btn ? COLOR_BLUE_MAIN : Color{ 15, 70, 140 });
+        scene->DrawRectangle(rtBarX + (thresh_val * rtBarW) / 255, rtBarY - 3, 2, rtBarH + 6, COLOR_WHITE);
+        draw_btn_badge(scene, rtBarX + rtBarW + 14, trigY + 94, 72, 32, "R1", rbBtn);
+        snprintf(buf, sizeof(buf), "Perfil aplicado en vista: %s", targetShortLabel ? targetShortLabel : "Global");
+        draw_text(scene, buf, fontFooter, trigX + 20, trigY + 154, COLOR_TEXT_DIM);
     }
 
     // ========================================================
-    // RIGHT HERO COLUMN: INTERACTIVE 3D ANIMATED CONTROLLER (X = 1118..1850, W = 732, H = 570)
+    // RIGHT HERO COLUMN: ORIGINAL 2D PS5 DUALSENSE / PS4 DUALSHOCK 4 (X=1106..1850, W=744, Y=214..846)
     // ========================================================
-    int viewCardX = 1118;
-    int viewCardY = 280;
-    int viewCardW = 732;
-    int viewCardH = 570;
+    int viewCardX = 1106;
+    int viewCardY = 214;
+    int viewCardW = 744;
+    int viewCardH = 632;
 
     draw_rounded_rect(scene, viewCardX, viewCardY, viewCardW, viewCardH, 14, Color{ 7, 12, 24 });
-    draw_rounded_outline(scene, viewCardX, viewCardY, viewCardW, viewCardH, 14, Color{ 0, 140, 235 }, 2);
+    draw_rounded_outline(scene, viewCardX, viewCardY, viewCardW, viewCardH, 14,
+                         tester.testMode ? Color{ 0, 240, 170 } : Color{ 0, 140, 235 }, 2);
 
-    // Top banner inside 3D Card
-    draw_rounded_rect(scene, viewCardX + 14, viewCardY + 14, viewCardW - 28, 46, 8, Color{ 12, 22, 40 });
-    draw_image(scene, btnPs, viewCardX + 24, viewCardY + 21);
-    draw_text(scene, "MANDO 3D EN TIEMPO REAL", fontCardTitle, viewCardX + 66, viewCardY + 45, COLOR_WHITE);
+    draw_rounded_rect(scene, viewCardX + 14, viewCardY + 12, viewCardW - 28, 44, 8, Color{ 12, 22, 40 });
+    draw_image(scene, btnPs, viewCardX + 22, viewCardY + 18);
+    draw_text(scene, showDualSense ? "MANDO ORIGINAL PS5 DUALSENSE" : "MANDO ORIGINAL PS4 DUALSHOCK 4",
+              fontCardTitle, viewCardX + 64, viewCardY + 41, COLOR_WHITE);
 
-    // Model badge (auto PS5 DualSense / PS4 DualShock 4)
-    const char* modelBadge = dualsenseConnected ? "PS5 DUALSENSE" : "PS4 DUALSHOCK 4";
-    Color badgeBorderCol = dualsenseConnected ? COLOR_BLUE_BRIGHT : Color{ 129, 140, 248 };
-    draw_rounded_rect(scene, viewCardX + viewCardW - 210, viewCardY + 21, 184, 32, 6, Color{ 16, 40, 74 });
-    draw_rounded_outline(scene, viewCardX + viewCardW - 210, viewCardY + 21, 184, 32, 6, badgeBorderCol, 1);
-    draw_text_centered(scene, modelBadge, fontSubtitle, viewCardX + viewCardW - 118, viewCardY + 43, COLOR_WHITE);
+    char slotBadge[40];
+    snprintf(slotBadge, sizeof(slotBadge), "JUGADOR %d", tester.selectedSlot + 1);
+    draw_rounded_rect(scene, viewCardX + viewCardW - 180, viewCardY + 18, 156, 32, 6, Color{ 16, 40, 74 });
+    draw_rounded_outline(scene, viewCardX + viewCardW - 180, viewCardY + 18, 156, 32, 6,
+                         showDualSense ? COLOR_BLUE_BRIGHT : Color{ 129, 140, 248 }, 1);
+    draw_text_centered(scene, slotBadge, fontSubtitle, viewCardX + viewCardW - 102, viewCardY + 40, COLOR_WHITE);
 
-    // Render live animated 3D perspective controller inside viewport!
-    controller3D.render(scene, viewCardX + 12, viewCardY + 64, viewCardW - 24, 444,
-                        dualsenseConnected, cfg, padData, tester.rumblePhase);
+    // Render crisp Original 2D DualSense or DualShock 4
+    controller3D.render(scene, viewCardX + 12, viewCardY + 60, viewCardW - 24, 514,
+                        showDualSense, cfg, padData, tester.rumblePhase, tester.selectedSlot);
 
-    // Bottom Live Pressed Buttons Readout Strip inside 3D Card
+    // Bottom Live Pressed Buttons Readout Strip (or Test Mode Hold-to-Exit bar)
+    int rawLT2 = (int)padData.analogButtons.l2;
+    int rawRT2 = (int)padData.analogButtons.r2;
     std::string pressedStr;
     auto addPressed = [&](const char* name) {
         if (!pressedStr.empty()) pressedStr += "  •  ";
@@ -1209,60 +1214,61 @@ void UI::render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData&
     if (padData.buttons & ORBIS_PAD_BUTTON_RIGHT)     addPressed("▶ Der");
     if (padData.buttons & ORBIS_PAD_BUTTON_L1)        addPressed("L1");
     if (padData.buttons & ORBIS_PAD_BUTTON_R1)        addPressed("R1");
-    if ((padData.buttons & ORBIS_PAD_BUTTON_L2) || rawLT > 20) addPressed("L2");
-    if ((padData.buttons & ORBIS_PAD_BUTTON_R2) || rawRT > 20) addPressed("R2");
+    if ((padData.buttons & ORBIS_PAD_BUTTON_L2) || rawLT2 > 20) addPressed("L2");
+    if ((padData.buttons & ORBIS_PAD_BUTTON_R2) || rawRT2 > 20) addPressed("R2");
     if (padData.buttons & ORBIS_PAD_BUTTON_L3)        addPressed("L3");
     if (padData.buttons & ORBIS_PAD_BUTTON_R3)        addPressed("R3");
-    if (padData.buttons & 0x00000001U)                addPressed("Share/Create");
+    if (padData.buttons & 0x00000001U)                addPressed(showDualSense ? "Create" : "Share");
     if (padData.buttons & ORBIS_PAD_BUTTON_OPTIONS)   addPressed("Options");
     if (padData.buttons & 0x00010000U)                addPressed("PS");
     if (padData.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD) addPressed("Clic Táctil");
     else if (padData.touch.fingers > 0)               addPressed("Dedo Táctil");
 
-    draw_rounded_rect(scene, viewCardX + 14, viewCardY + viewCardH - 54, viewCardW - 28, 40, 8, Color{ 10, 18, 34 });
-    draw_rounded_outline(scene, viewCardX + 14, viewCardY + viewCardH - 54, viewCardW - 28, 40, 8,
+    draw_rounded_rect(scene, viewCardX + 14, viewCardY + viewCardH - 52, viewCardW - 28, 40, 8, Color{ 10, 18, 34 });
+    draw_rounded_outline(scene, viewCardX + 14, viewCardY + viewCardH - 52, viewCardW - 28, 40, 8,
                          pressedStr.empty() ? COLOR_BORDER_DIM : Color{ 0, 255, 160 }, 1);
     draw_text_centered(scene,
-                       pressedStr.empty() ? "Pulsa cualquier botón, mueve sticks o toca el Touchpad para iluminar el 3D" : pressedStr.c_str(),
+                       pressedStr.empty() ? "Pulsa cualquier botón, mueve sticks o desliza el Touchpad" : pressedStr.c_str(),
                        fontCardDesc,
                        viewCardX + viewCardW / 2,
-                       viewCardY + viewCardH - 27,
+                       viewCardY + viewCardH - 25,
                        pressedStr.empty() ? COLOR_TEXT_DIM : Color{ 0, 255, 160 });
 
     // ========================================================
-    // 4. FOOTER FOR TESTER
+    // FOOTER FOR TESTER
     // ========================================================
-    scene->DrawRectangle(60, 865, 1800, 2, COLOR_DIVIDER);
-
-    draw_image(scene, iconMode, 60, 890);
-    snprintf(buf, sizeof(buf), "Laboratorio 3D - Ranura %d (Jugador %d)", tester.selectedSlot + 1, tester.selectedSlot + 1);
-    draw_text(scene, buf, fontCardTitle, 120, 912, COLOR_WHITE);
+    scene->DrawRectangle(56, 862, 1808, 2, COLOR_DIVIDER);
+    draw_image(scene, iconMode, 56, 888);
+    snprintf(buf, sizeof(buf), "Laboratorio Original 2D - Jugador %d (Ranura %d)", tester.selectedSlot + 1, tester.selectedSlot + 1);
+    draw_text(scene, buf, fontCardTitle, 116, 910, COLOR_WHITE);
 
     if (tester.testMode) {
-        draw_text(scene, "Modo Prueba Activo - Todas las entradas aisladas, navegacion bloqueada", fontFooter, 120, 938, Color{ 0, 255, 150 });
-
-        draw_image(scene, btnR3, 1600, 897);
-        draw_text(scene, "Salir Modo Prueba", fontFooter, 1645, 922, Color{ 0, 255, 150 });
+        if (tester.testModeHoldFrames > 0) {
+            int pct = (tester.testModeHoldFrames * 100) / 45;
+            if (pct > 100) pct = 100;
+            snprintf(buf, sizeof(buf), "Saliendo del Modo Prueba Libre: %d%%...", pct);
+            draw_text(scene, buf, fontFooter, 116, 936, COLOR_BLUE_BRIGHT);
+            draw_rounded_rect(scene, 780, 902, 520, 22, 6, Color{ 16, 28, 48 });
+            draw_rounded_rect(scene, 780, 902, (520 * pct) / 100, 22, 6, Color{ 0, 255, 160 });
+        } else {
+            draw_text(scene, "Modo Prueba Libre ACTIVO: todos los botones solo iluminan el mando en pantalla", fontFooter, 116, 936, Color{ 0, 255, 150 });
+        }
+        draw_image(scene, btnOptions, 1340, 898);
+        draw_text(scene, "Mantén OPTIONS (0.75s) o pulsa L1+R1 para salir", fontFooter, 1420, 920, Color{ 0, 255, 150 });
     } else {
-        draw_text(scene, "Modo puro por hardware (entradas independientes por jugador)", fontFooter, 120, 938, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "Usa Arriba/Abajo en el menú izquierdo para probar cada función sin solapes", fontFooter, 116, 936, COLOR_BLUE_BRIGHT);
 
-        draw_image(scene, btnR3, 760, 897);
-        draw_text(scene, "Modo Prueba", fontFooter, 804, 922, COLOR_BLUE_BRIGHT);
+        draw_image(scene, btnArrows, 1160, 899);
+        draw_text(scene, "Seleccionar", fontFooter, 1214, 920, COLOR_TEXT_DIM);
 
-        draw_image(scene, btnArrows, 965, 901);
-        draw_text(scene, "Ranura", fontFooter, 1018, 922, COLOR_TEXT_DIM);
+        draw_image(scene, btnCross, 1390, 895);
+        draw_text(scene, "Ejecutar", fontFooter, 1435, 920, COLOR_BLUE_BRIGHT);
 
-        draw_image(scene, btnSquare, 1125, 897);
-        draw_text(scene, "Vibrar", fontFooter, 1170, 922, COLOR_TEXT_DIM);
+        draw_image(scene, btnCircle, 1550, 895);
+        draw_text(scene, "Ajustes", fontFooter, 1595, 920, COLOR_TEXT_DIM);
 
-        draw_image(scene, btnTriangle, 1275, 897);
-        draw_text(scene, "Calibrar", fontFooter, 1320, 922, COLOR_TEXT_DIM);
-
-        draw_image(scene, btnCross, 1450, 897);
-        draw_text(scene, "Aplicar", fontFooter, 1495, 922, tester.calib.completed ? COLOR_BLUE_BRIGHT : COLOR_TEXT_DIM);
-
-        draw_image(scene, btnOptions, 1650, 900);
-        draw_text(scene, "Salir", fontFooter, 1730, 922, COLOR_TEXT_DIM);
+        draw_image(scene, btnOptions, 1700, 898);
+        draw_text(scene, "Salir", fontFooter, 1780, 920, COLOR_TEXT_DIM);
     }
 }
 
@@ -1430,14 +1436,16 @@ void UI::render_remap(Scene2D* scene, const HidStatus& status, const HidProfile&
     }
 }
 
-void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard, const HidStatus& status) {
+void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard, const HidStatus& status, const std::vector<ControllerTarget>* targets, int activeTargetIndex) {
+    draw_target_selector_strip(scene, targets, activeTargetIndex);
+
     // Top Exclusive Banner for PS5 DualSense
-    draw_rounded_rect(scene, 410, 145, 1440, 104, 12, Color{ 13, 24, 46 });
-    draw_rounded_outline(scene, 410, 145, 1440, 104, 12, COLOR_BLUE_MAIN, 1);
-    draw_rounded_rect(scene, 410, 145, 6, 104, 3, COLOR_BLUE_BRIGHT);
-    draw_image(scene, btnPs, 436, 173);
-    draw_text(scene, "Centro Exclusivo para Mandos PlayStation 5 (DualSense / DualSense Edge)", fontCardTitle, 496, 188, COLOR_WHITE);
-    draw_text(scene, "Control dedicado de Gatillos Adaptativos L2/R2, Halo LED RGB, LEDs de Jugador, Botón Mute y Reportes BT de 78 Bytes.", fontCardDesc, 496, 220, COLOR_BLUE_BRIGHT);
+    draw_rounded_rect(scene, 410, 182, 1440, 74, 12, Color{ 13, 24, 46 });
+    draw_rounded_outline(scene, 410, 182, 1440, 74, 12, COLOR_BLUE_MAIN, 1);
+    draw_rounded_rect(scene, 410, 182, 6, 74, 3, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnPs, 434, 198);
+    draw_text(scene, "Centro Exclusivo para Mandos PlayStation 5 (DualSense / DualSense Edge)", fontCardTitle, 492, 212, COLOR_WHITE);
+    draw_text(scene, "Cambia de mando con [L3] para guardar colores y gatillos distintos en cada DualSense por MAC Bluetooth.", fontCardDesc, 492, 239, COLOR_BLUE_BRIGHT);
 
     const int TOTAL_CARDS = 8;
     const int VISIBLE_CARDS = 5;
@@ -1520,7 +1528,6 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         cardValues[7] = ConfigManager::DS_BT_MODE_OPTIONS[cfg.ds_bt_mode];
     } else cardValues[7] = "Modo Seguro (10 Bytes)";
 
-    // Static color preview table
     static const Color colorPreviews[6] = {
         Color{ 0, 112, 209 },  // Blue
         Color{ 255, 40, 40 },  // Red
@@ -1532,14 +1539,14 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
 
     const int DS_CARD_X = 410;
     const int DS_CARD_W = 880;
-    const int DS_CARD_H = 82;
+    const int DS_CARD_H = 78;
     const int DS_CARD_SPACING = 8;
 
     for (int i = 0; i < VISIBLE_CARDS; i++) {
         int cardIdx = i + scrollOffset;
         if (cardIdx >= TOTAL_CARDS) break;
 
-        int cardY = 264 + i * (DS_CARD_H + DS_CARD_SPACING);
+        int cardY = CARD_Y_START + i * (DS_CARD_H + DS_CARD_SPACING);
         bool isSelected = (cardIdx == selectedCard);
 
         draw_rounded_rect(scene, DS_CARD_X, cardY, DS_CARD_W, DS_CARD_H, 12, isSelected ? Color{ 16, 30, 54 } : COLOR_CARD_BG);
@@ -1553,11 +1560,11 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         }
 
         if (cardIcons[cardIdx]) {
-            draw_image(scene, *cardIcons[cardIdx], DS_CARD_X + 20, cardY + 17);
+            draw_image(scene, *cardIcons[cardIdx], DS_CARD_X + 20, cardY + 15);
         }
 
-        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS_CARD_X + 80, cardY + 33, COLOR_WHITE);
-        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS_CARD_X + 80, cardY + 61, COLOR_TEXT_DIM);
+        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS_CARD_X + 80, cardY + 32, COLOR_WHITE);
+        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS_CARD_X + 80, cardY + 59, COLOR_TEXT_DIM);
 
         int vBoxW = 290;
         int vBoxH = 44;
@@ -1567,21 +1574,21 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         draw_rounded_outline(scene, vBoxX, vBoxY, vBoxW, vBoxH, 8, isSelected ? COLOR_BLUE_BRIGHT : COLOR_BORDER_DIM, 1);
 
         if (isSelected) {
-            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 49, COLOR_BLUE_BRIGHT);
-            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 49, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 47, COLOR_BLUE_BRIGHT);
+            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 47, COLOR_BLUE_BRIGHT);
         }
 
         if (cardIdx == 1) {
             int c_idx = cfg.ds_lightbar_color;
             if (c_idx >= 0 && c_idx < 6) {
-                draw_circle(scene, vBoxX + 36, cardY + 41, 7, colorPreviews[c_idx]);
-                draw_circle_outline(scene, vBoxX + 36, cardY + 41, 7, COLOR_WHITE, 1);
+                draw_circle(scene, vBoxX + 36, cardY + 39, 7, colorPreviews[c_idx]);
+                draw_circle_outline(scene, vBoxX + 36, cardY + 39, 7, COLOR_WHITE, 1);
             }
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 49, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 47, COLOR_WHITE);
         } else if (cardIdx == 5) {
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 40, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 38, COLOR_WHITE);
             int vBarX = vBoxX + 55;
-            int vBarY = cardY + 55;
+            int vBarY = cardY + 53;
             int vBarW = 180;
             int vBarH = 6;
             draw_rounded_rect(scene, vBarX, vBarY, vBarW, vBarH, 3, Color{ 15, 25, 40 });
@@ -1592,27 +1599,27 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
                 draw_rounded_rect(scene, vBarX, vBarY, fillW, vBarH, 3, fillCol);
             }
         } else {
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 49, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 47, COLOR_WHITE);
         }
     }
 
     if (scrollOffset > 0) {
-        draw_text(scene, "^", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 260, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "^", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 263, COLOR_BLUE_BRIGHT);
     }
     if (scrollOffset + VISIBLE_CARDS < TOTAL_CARDS) {
-        draw_text(scene, "v", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 724, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "v", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 712, COLOR_BLUE_BRIGHT);
     }
 
-    // Right-Hand PS5 DualSense Multi-Controller Telemetry & Battery Box
+    // Right-Hand PS5 DualSense Multi-Controller Telemetry Box (Y = 266..688, H = 422)
     const int BOX_X = 1310;
-    const int BOX_Y = 264;
+    const int BOX_Y = 266;
     const int BOX_W = 540;
-    const int BOX_H = 442;
+    const int BOX_H = 422;
 
     draw_rounded_rect(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BG);
     draw_rounded_outline(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BORDER, 1);
 
-    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 14);
+    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 12);
     char dsHeader[64];
     int activeDevs = (int)status.devices.size();
     if (activeDevs > 1) {
@@ -1620,15 +1627,14 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
     } else {
         snprintf(dsHeader, sizeof(dsHeader), "Telemetría PS5 DualSense");
     }
-    draw_text(scene, dsHeader, fontCardTitle, BOX_X + 76, BOX_Y + 34, COLOR_WHITE);
-    draw_text(scene, "Batería Exacta, Carga USB-C y Perfiles PS4", fontCardDesc, BOX_X + 76, BOX_Y + 54, COLOR_BLUE_BRIGHT);
+    draw_text(scene, dsHeader, fontCardTitle, BOX_X + 76, BOX_Y + 32, COLOR_WHITE);
+    draw_text(scene, "Batería Exacta, MAC Guardada y Perfiles PS4", fontCardDesc, BOX_X + 76, BOX_Y + 52, COLOR_BLUE_BRIGHT);
+    draw_rounded_rect(scene, BOX_X + 22, BOX_Y + 62, BOX_W - 44, 1, 0, COLOR_CARD_BORDER);
 
-    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 66, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
-
-    // Build list of up to 3 slots to display inside telemetry box
     int numToShow = (activeDevs > 0) ? activeDevs : 1;
-    if (numToShow > 3) numToShow = 3;
-    int curY = BOX_Y + 76;
+    if (numToShow > 4) numToShow = 4;
+    int curY = BOX_Y + 70;
+    int mpY = BOX_Y + 332; // Reserved bottom 90px exclusively for Multiplayer card
 
     for (int d = 0; d < numToShow; d++) {
         int slotNum = d + 1;
@@ -1636,6 +1642,7 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         bool chg = status.battery_charging;
         int bstat = status.battery_status;
         std::string uname = status.user_name;
+        std::string macStr = "";
 
         if (d < (int)status.devices.size()) {
             slotNum = (status.devices[d].player_slot > 0) ? status.devices[d].player_slot : (d + 1);
@@ -1643,40 +1650,49 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
             chg = status.devices[d].battery_charging;
             bstat = status.devices[d].battery_status;
             uname = status.devices[d].user_name;
+            macStr = status.devices[d].mac;
         }
 
-        int cardH = (numToShow == 1) ? 118 : ((numToShow == 2) ? 112 : 80);
-        int gap = (numToShow == 3) ? 5 : 8;
-        draw_rounded_rect(scene, BOX_X + 22, curY, BOX_W - 44, cardH, 10, Color{ 14, 24, 42 });
-        draw_rounded_outline(scene, BOX_X + 22, curY, BOX_W - 44, cardH, 10, (chg || bstat == 1) ? Color{ 0, 240, 180 } : COLOR_BORDER_DIM, 1);
+        // Dynamic heights strictly guaranteed never to collide with mpY (266+70 = 336..594)
+        int cardH = (numToShow == 1) ? 124 : ((numToShow == 2) ? 116 : ((numToShow == 3) ? 79 : 59));
+        int gap = (numToShow <= 2) ? 8 : 5;
+        draw_rounded_rect(scene, BOX_X + 22, curY, BOX_W - 44, cardH, 9, Color{ 14, 24, 42 });
+        draw_rounded_outline(scene, BOX_X + 22, curY, BOX_W - 44, cardH, 9, (chg || bstat == 1) ? Color{ 0, 240, 180 } : COLOR_BORDER_DIM, 1);
 
-        draw_circle(scene, BOX_X + 40, curY + 21, 5, Color{ 0, 255, 140 });
+        draw_circle(scene, BOX_X + 38, curY + 19, 5, Color{ 0, 255, 140 });
         char pTitle[128];
         if (!uname.empty()) {
-            snprintf(pTitle, sizeof(pTitle), "Jugador %d • Perfil: %s", slotNum, uname.c_str());
+            snprintf(pTitle, sizeof(pTitle), "J%d • %s%s", slotNum, uname.c_str(),
+                     (!macStr.empty() && numToShow <= 2) ? (std::string(" [") + macStr.substr(macStr.size() > 4 ? macStr.size() - 4 : 0) + "]").c_str() : "");
         } else {
             snprintf(pTitle, sizeof(pTitle), "Jugador %d • DualSense BT", slotNum);
         }
-        draw_text(scene, pTitle, fontCardTitle, BOX_X + 54, curY + 27, COLOR_WHITE);
+        draw_text(scene, pTitle, (numToShow >= 4) ? fontCardDesc : fontCardTitle, BOX_X + 52, curY + 25, COLOR_WHITE);
 
-        char bLabel[64];
-        Color bTextCol = COLOR_BLUE_BRIGHT;
-        if (bstat == 1 || chg) {
-            snprintf(bLabel, sizeof(bLabel), "%d%% [CARGANDO USB-C]", batt);
-            bTextCol = Color{ 0, 255, 180 };
-        } else if (bstat == 2) {
-            snprintf(bLabel, sizeof(bLabel), "100%% [CARGA COMPLETA]");
-            bTextCol = Color{ 0, 255, 140 };
+        if (numToShow <= 3) {
+            char bLabel[64];
+            Color bTextCol = COLOR_BLUE_BRIGHT;
+            if (bstat == 1 || chg) {
+                snprintf(bLabel, sizeof(bLabel), "%d%% [CARGANDO USB-C]", batt);
+                bTextCol = Color{ 0, 255, 180 };
+            } else if (bstat == 2) {
+                snprintf(bLabel, sizeof(bLabel), "100%% [COMPLETA]");
+                bTextCol = Color{ 0, 255, 140 };
+            } else {
+                snprintf(bLabel, sizeof(bLabel), "Batería: %d%%", batt);
+                bTextCol = (batt <= 20) ? Color{ 255, 80, 80 } : COLOR_BLUE_BRIGHT;
+            }
+            draw_text(scene, bLabel, fontCardDesc, BOX_X + 38, curY + 46, bTextCol);
         } else {
-            snprintf(bLabel, sizeof(bLabel), "Batería: %d%%", batt);
-            bTextCol = (batt <= 20) ? Color{ 255, 80, 80 } : COLOR_BLUE_BRIGHT;
+            char bMini[32];
+            snprintf(bMini, sizeof(bMini), "%d%%", batt);
+            draw_text(scene, bMini, fontCardDesc, BOX_X + BOX_W - 86, curY + 25, Color{ 0, 255, 160 });
         }
-        draw_text(scene, bLabel, fontCardDesc, BOX_X + 40, curY + 49, bTextCol);
 
-        int barX = BOX_X + 40;
-        int barY = curY + 57;
-        int barW = BOX_W - 80;
-        int barH = 12;
+        int barX = BOX_X + 38;
+        int barY = (numToShow >= 4) ? (curY + 38) : (curY + 54);
+        int barW = BOX_W - 76;
+        int barH = (numToShow >= 4) ? 10 : 12;
         draw_rounded_rect(scene, barX, barY, barW, barH, 4, Color{ 10, 16, 28 });
         draw_rounded_outline(scene, barX, barY, barW, barH, 4, COLOR_BORDER_DIM, 1);
 
@@ -1689,22 +1705,19 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         }
 
         if (numToShow == 1) {
-            draw_text(scene, "Carga USB-C activa: puedes cargar por cable mientras juegas por BT.", fontCardDesc, BOX_X + 40, curY + 98, COLOR_TEXT_DIM);
+            draw_text(scene, "Carga USB-C activa mientras juegas por Bluetooth.", fontCardDesc, BOX_X + 38, curY + 98, COLOR_TEXT_DIM);
         }
 
         curY += cardH + gap;
     }
 
     // Multiplayer & Profile Selector Action Card at bottom of Telemetry Box
-    int mpY = BOX_Y + 332;
-    draw_rounded_rect(scene, BOX_X + 22, mpY, BOX_W - 44, 98, 10, Color{ 15, 32, 58 });
-    draw_rounded_outline(scene, BOX_X + 22, mpY, BOX_W - 44, 98, 10, COLOR_BLUE_MAIN, 1);
-    draw_image(scene, btnTriangle, BOX_X + 34, mpY + 10);
-    draw_text(scene, "Multijugador Local y Perfil PS4", fontCardTitle, BOX_X + 80, mpY + 32, Color{ 0, 255, 160 });
-    draw_text(scene, "Pulsa [TRIÁNGULO] o (Create + Izquierda)", fontCardDesc, BOX_X + 34, mpY + 58, COLOR_WHITE);
-    draw_text(scene, "para elegir '¿Quién está usando este mando?'.", fontCardDesc, BOX_X + 34, mpY + 82, COLOR_BLUE_BRIGHT);
+    draw_rounded_rect(scene, BOX_X + 22, mpY, BOX_W - 44, 78, 10, Color{ 15, 32, 58 });
+    draw_rounded_outline(scene, BOX_X + 22, mpY, BOX_W - 44, 78, 10, COLOR_BLUE_MAIN, 1);
+    draw_image(scene, btnTriangle, BOX_X + 32, mpY + 8);
+    draw_text(scene, "Multijugador Local y Perfil PS4", fontCardTitle, BOX_X + 78, mpY + 30, Color{ 0, 255, 160 });
+    draw_text(scene, "Pulsa [TRIÁNGULO] para '¿Quién está usando este mando?'.", fontFooter, BOX_X + 32, mpY + 58, COLOR_WHITE);
 
-    // Dynamic Option Explanation Panel for DualSense
     static const char* dsWhat[TOTAL_CARDS] = {
         "Configura el efecto luminoso del halo LED RGB que rodea el Touchpad del mando PS5 (control directo vía reporte BT 0x31).",
         "Selecciona el color RGB fijo empleado cuando el modo de iluminación está en Color Estático o Pulso Respiración.",
@@ -1720,7 +1733,7 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
     if (dsSel == 0) {
         static const char* lbEff[6] = {
             "Sincronizar Juego: deja la barra en su color neutro de consola o perfil de jugador PS4.",
-            "Color Estático: fija de forma permanente el color RGB elegido abajo sin que el menú ni los juegos lo quiten.",
+            "Color Estático: fija de forma permanente el color RGB elegido abajo en este mando (y se recuerda al volver a conectarlo).",
             "Estado Batería: la barra cambia de verde (>60%) a ámbar y rojo (<20%), o azul/verde pulsante al cargar por USB-C.",
             "Apagado: apaga por completo el halo LED RGB del DualSense para ahorrar batería y evitar reflejos.",
             "Arcoíris Dinámico: el halo del DualSense recorre suavemente todo el espectro de colores RGB en vivo.",
@@ -1729,7 +1742,7 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         int mi = (cfg.ds_lightbar_mode >= 0 && cfg.ds_lightbar_mode < 6) ? cfg.ds_lightbar_mode : 0;
         dsEff = lbEff[mi];
     } else if (dsSel == 1) {
-        dsEff = std::string("Color seleccionado: ") + cardValues[1] + " (al cambiar color activa Color Estático automáticamente y permanece al salir).";
+        dsEff = std::string("Color seleccionado: ") + cardValues[1] + " (al cambiar color activa Color Estático automáticamente y queda guardado).";
     } else if (dsSel == 2) {
         static const char* brEff[3] = {
             "Alto (100%): máxima intensidad del halo RGB y de las luces del mando.",
@@ -1772,33 +1785,37 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
     draw_option_guide_box(scene, cardTitles[dsSel], dsWhat[dsSel], dsEff.c_str(), COLOR_BLUE_MAIN);
 
     // Footer
-    scene->DrawRectangle(56, 865, 1808, 2, COLOR_DIVIDER);
+    scene->DrawRectangle(56, 862, 1808, 2, COLOR_DIVIDER);
+    draw_image(scene, btnPs, 56, 888);
+    draw_text(scene, "Módulo Exclusivo PS5 DualSense", fontCardTitle, 116, 910, COLOR_WHITE);
+    draw_text(scene, "Cada DualSense recuerda su configuración propia por hardware Bluetooth", fontFooter, 116, 936, COLOR_BLUE_BRIGHT);
 
-    draw_image(scene, btnPs, 56, 890);
-    draw_text(scene, "Módulo Exclusivo PS5 DualSense", fontCardTitle, 116, 912, COLOR_WHITE);
-    draw_text(scene, "Soporte hasta 4 mandos DualSense, batería en vivo y efectos RGB Arcoíris/Respiración", fontFooter, 116, 938, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnL3, 955, 895);
+    draw_text(scene, "Mando", fontFooter, 1000, 920, COLOR_WHITE);
 
-    draw_image(scene, btnTriangle, 1110, 897);
-    draw_text(scene, "Elegir Perfil PS4", fontFooter, 1155, 922, Color{ 0, 255, 150 });
+    draw_image(scene, btnTriangle, 1110, 895);
+    draw_text(scene, "Elegir Perfil PS4", fontFooter, 1155, 920, Color{ 0, 255, 150 });
 
-    draw_image(scene, btnArrows, 1370, 901);
-    draw_text(scene, "Cambiar", fontFooter, 1424, 922, COLOR_TEXT_DIM);
+    draw_image(scene, btnArrows, 1370, 899);
+    draw_text(scene, "Cambiar", fontFooter, 1424, 920, COLOR_TEXT_DIM);
 
-    draw_image(scene, btnCross, 1540, 897);
-    draw_text(scene, "Guardar", fontFooter, 1585, 922, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnCross, 1540, 895);
+    draw_text(scene, "Guardar", fontFooter, 1585, 920, COLOR_BLUE_BRIGHT);
 
-    draw_image(scene, btnOptions, 1690, 900);
-    draw_text(scene, "Salir", fontFooter, 1770, 922, COLOR_TEXT_DIM);
+    draw_image(scene, btnOptions, 1690, 898);
+    draw_text(scene, "Salir", fontFooter, 1770, 920, COLOR_TEXT_DIM);
 }
 
-void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCard, const OrbisPadData& padData, const TesterState& tester) {
+void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCard, const OrbisPadData& padData, const TesterState& tester, const std::vector<ControllerTarget>* targets, int activeTargetIndex) {
+    draw_target_selector_strip(scene, targets, activeTargetIndex);
+
     // Top Exclusive Banner for Native PS4 DualShock 4
-    draw_rounded_rect(scene, 410, 145, 1440, 104, 12, Color{ 16, 22, 44 });
-    draw_rounded_outline(scene, 410, 145, 1440, 104, 12, COLOR_ACCENT_INDIGO, 1);
-    draw_rounded_rect(scene, 410, 145, 6, 104, 3, COLOR_ACCENT_INDIGO);
-    draw_image(scene, iconRumble, 436, 173);
-    draw_text(scene, "Configurador Nativo DualShock 4 (Mandos Originales PS4 CUH-ZCT1 / ZCT2)", fontCardTitle, 496, 188, COLOR_WHITE);
-    draw_text(scene, "Personaliza la barra de luz frontal del mando PS4, brillo de ahorro de batería, motores de vibración y giroscopio.", fontCardDesc, 496, 220, COLOR_BLUE_BRIGHT);
+    draw_rounded_rect(scene, 410, 182, 1440, 74, 12, Color{ 16, 22, 44 });
+    draw_rounded_outline(scene, 410, 182, 1440, 74, 12, COLOR_ACCENT_INDIGO, 1);
+    draw_rounded_rect(scene, 410, 182, 6, 74, 3, COLOR_ACCENT_INDIGO);
+    draw_image(scene, iconRumble, 434, 198);
+    draw_text(scene, "Configurador Nativo DualShock 4 (Mandos Originales PS4 CUH-ZCT1 / ZCT2)", fontCardTitle, 492, 212, COLOR_WHITE);
+    draw_text(scene, "Cambia de mando con [L3] para guardar colores, brillo y vibración distintos en cada jugador PS4.", fontCardDesc, 492, 239, COLOR_BLUE_BRIGHT);
 
     const int TOTAL_CARDS = 6;
     const int VISIBLE_CARDS = 5;
@@ -1875,14 +1892,14 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
 
     const int DS4_CARD_X = 410;
     const int DS4_CARD_W = 880;
-    const int DS4_CARD_H = 82;
+    const int DS4_CARD_H = 78;
     const int DS4_CARD_SPACING = 8;
 
     for (int i = 0; i < VISIBLE_CARDS; i++) {
         int cardIdx = i + scrollOffset;
         if (cardIdx >= TOTAL_CARDS) break;
 
-        int cardY = 264 + i * (DS4_CARD_H + DS4_CARD_SPACING);
+        int cardY = CARD_Y_START + i * (DS4_CARD_H + DS4_CARD_SPACING);
         bool isSelected = (cardIdx == selectedCard);
 
         draw_rounded_rect(scene, DS4_CARD_X, cardY, DS4_CARD_W, DS4_CARD_H, 12, isSelected ? Color{ 18, 28, 56 } : COLOR_CARD_BG);
@@ -1896,11 +1913,11 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
         }
 
         if (cardIcons[cardIdx]) {
-            draw_image(scene, *cardIcons[cardIdx], DS4_CARD_X + 20, cardY + 17);
+            draw_image(scene, *cardIcons[cardIdx], DS4_CARD_X + 20, cardY + 15);
         }
 
-        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS4_CARD_X + 80, cardY + 33, COLOR_WHITE);
-        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS4_CARD_X + 80, cardY + 61, COLOR_TEXT_DIM);
+        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS4_CARD_X + 80, cardY + 32, COLOR_WHITE);
+        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS4_CARD_X + 80, cardY + 59, COLOR_TEXT_DIM);
 
         int vBoxW = 290;
         int vBoxH = 44;
@@ -1910,45 +1927,43 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
         draw_rounded_outline(scene, vBoxX, vBoxY, vBoxW, vBoxH, 8, isSelected ? COLOR_BLUE_BRIGHT : COLOR_BORDER_DIM, 1);
 
         if (isSelected) {
-            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 49, COLOR_BLUE_BRIGHT);
-            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 49, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 47, COLOR_BLUE_BRIGHT);
+            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 47, COLOR_BLUE_BRIGHT);
         }
 
         if (cardIdx == 1) {
             int c_idx = cfg.ds4_lightbar_color;
             if (c_idx >= 0 && c_idx < 7) {
-                draw_circle(scene, vBoxX + 36, cardY + 41, 8, ds4Colors[c_idx]);
-                draw_circle_outline(scene, vBoxX + 36, cardY + 41, 8, COLOR_WHITE, 1);
+                draw_circle(scene, vBoxX + 36, cardY + 39, 8, ds4Colors[c_idx]);
+                draw_circle_outline(scene, vBoxX + 36, cardY + 39, 8, COLOR_WHITE, 1);
             }
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 49, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 47, COLOR_WHITE);
         } else {
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 49, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 47, COLOR_WHITE);
         }
     }
 
     if (scrollOffset > 0) {
-        draw_text(scene, "^", fontCardTitle, DS4_CARD_X + DS4_CARD_W / 2, 260, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "^", fontCardTitle, DS4_CARD_X + DS4_CARD_W / 2, 263, COLOR_BLUE_BRIGHT);
     }
     if (scrollOffset + VISIBLE_CARDS < TOTAL_CARDS) {
-        draw_text(scene, "v", fontCardTitle, DS4_CARD_X + DS4_CARD_W / 2, 724, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "v", fontCardTitle, DS4_CARD_X + DS4_CARD_W / 2, 712, COLOR_BLUE_BRIGHT);
     }
 
-    // Right-Hand Native DualShock 4 Live Preview & Status Panel
+    // Right-Hand Native DualShock 4 Live Preview & Status Panel (Y = 266..688, H = 422)
     const int BOX_X = 1310;
-    const int BOX_Y = 264;
+    const int BOX_Y = 266;
     const int BOX_W = 540;
-    const int BOX_H = 442;
+    const int BOX_H = 422;
 
     draw_rounded_rect(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BG);
     draw_rounded_outline(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BORDER, 1);
 
-    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 14);
-    draw_text(scene, "Estado DualShock 4 Nativo", fontCardTitle, BOX_X + 76, BOX_Y + 34, COLOR_WHITE);
-    draw_text(scene, "Control Persistente vía Demonio + libScePad", fontCardDesc, BOX_X + 76, BOX_Y + 54, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 12);
+    draw_text(scene, "Estado DualShock 4 Nativo", fontCardTitle, BOX_X + 76, BOX_Y + 32, COLOR_WHITE);
+    draw_text(scene, "Control Persistente vía Demonio + libScePad", fontCardDesc, BOX_X + 76, BOX_Y + 52, COLOR_BLUE_BRIGHT);
+    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 62, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
 
-    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 66, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
-
-    // Visual Lightbar Prism Preview
     int activeColorIdx = (cfg.ds4_lightbar_color >= 0 && cfg.ds4_lightbar_color < 7) ? cfg.ds4_lightbar_color : 0;
     Color activeLed = ds4Colors[activeColorIdx];
     static uint32_t s_preview_tick = 0;
@@ -1958,7 +1973,6 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
     } else if (cfg.ds4_lightbar_mode == 2) {
         activeLed = Color{ 16, 185, 129 };
     } else if (cfg.ds4_lightbar_mode == 4) {
-        // Dynamic Rainbow preview
         uint32_t ph = (s_preview_tick * 6U) % 1536U;
         uint32_t reg = ph / 256U;
         uint32_t rem = ph % 256U;
@@ -1971,7 +1985,6 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
             default: activeLed = Color{ 255, 0, (uint8_t)(255 - rem) }; break;
         }
     } else if (cfg.ds4_lightbar_mode == 5) {
-        // Breathing pulse preview
         uint32_t ph = (s_preview_tick * 4U) % 512U;
         uint32_t tri = (ph < 256U) ? ph : (511U - ph);
         uint32_t sc = 15U + (tri * 85U) / 255U;
@@ -1994,47 +2007,43 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
         }
     }
 
-    draw_text(scene, "Vista Previa Barra de Luz Frontal:", fontCardTitle, BOX_X + 30, BOX_Y + 92, COLOR_WHITE);
-    draw_rounded_rect(scene, BOX_X + 30, BOX_Y + 104, BOX_W - 60, 26, 8, activeLed);
-    draw_rounded_outline(scene, BOX_X + 30, BOX_Y + 104, BOX_W - 60, 26, 8, COLOR_WHITE, 1);
+    draw_text(scene, "Vista Previa Barra de Luz Frontal:", fontCardDesc, BOX_X + 28, BOX_Y + 86, COLOR_WHITE);
+    draw_rounded_rect(scene, BOX_X + 28, BOX_Y + 96, BOX_W - 56, 24, 7, activeLed);
+    draw_rounded_outline(scene, BOX_X + 28, BOX_Y + 96, BOX_W - 56, 24, 7, COLOR_WHITE, 1);
     if (cfg.ds4_lightbar_mode == 3) {
-        draw_text_centered(scene, "LED APAGADO (0% Brillo - Ahorro Total)", fontCardDesc, BOX_X + BOX_W / 2, BOX_Y + 123, COLOR_TEXT_DIM);
+        draw_text_centered(scene, "LED APAGADO (0% Brillo - Ahorro Total)", fontFooter, BOX_X + BOX_W / 2, BOX_Y + 114, COLOR_TEXT_DIM);
     }
 
-    // Active Slots Status
-    draw_text(scene, "Mandos PS4 Detectados en Consola:", fontCardTitle, BOX_X + 30, BOX_Y + 154, COLOR_WHITE);
+    draw_text(scene, "Mandos Activos por Ranura PS4:", fontCardDesc, BOX_X + 28, BOX_Y + 144, COLOR_WHITE);
     for (int s = 0; s < 4; s++) {
-        int sy = BOX_Y + 166 + s * 34;
+        int sy = BOX_Y + 154 + s * 32;
         bool conn = tester.slotConnected[s];
-        draw_rounded_rect(scene, BOX_X + 30, sy, BOX_W - 60, 28, 6, conn ? Color{ 14, 32, 54 } : Color{ 10, 16, 26 });
-        draw_circle(scene, BOX_X + 50, sy + 14, 5, conn ? Color{ 0, 240, 140 } : Color{ 90, 100, 115 });
+        draw_rounded_rect(scene, BOX_X + 28, sy, BOX_W - 56, 26, 6, conn ? Color{ 14, 32, 54 } : Color{ 10, 16, 26 });
+        draw_circle(scene, BOX_X + 46, sy + 13, 5, conn ? Color{ 0, 240, 140 } : Color{ 90, 100, 115 });
         char slotTxt[96];
-        snprintf(slotTxt, sizeof(slotTxt), "Jugador %d (Ranura %d): %s", s + 1, s + 1, conn ? "DualShock 4 Activo" : "Sin conexión");
-        draw_text(scene, slotTxt, fontCardDesc, BOX_X + 68, sy + 20, conn ? COLOR_WHITE : COLOR_TEXT_DIM);
+        snprintf(slotTxt, sizeof(slotTxt), "Jugador %d (Ranura %d): %s", s + 1, s + 1, conn ? "Mando Activo" : "Sin conexión");
+        draw_text(scene, slotTxt, fontFooter, BOX_X + 64, sy + 19, conn ? COLOR_WHITE : COLOR_TEXT_DIM);
     }
 
-    // Live Analog, Touchpad & D-Pad Telemetry Mini-Readout
-    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 308, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
-    draw_text(scene, "Lectura Instantánea del Mando Activo:", fontCardTitle, BOX_X + 30, BOX_Y + 334, COLOR_WHITE);
+    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 292, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
+    draw_text(scene, "Lectura Instantánea:", fontCardDesc, BOX_X + 28, BOX_Y + 318, COLOR_WHITE);
     char stickInfo[160];
     snprintf(stickInfo, sizeof(stickInfo), "L3:(%d,%d) R3:(%d,%d) | L2:%d R2:%d",
              (int)padData.leftStick.x, (int)padData.leftStick.y,
              (int)padData.rightStick.x, (int)padData.rightStick.y,
              (int)padData.analogButtons.l2, (int)padData.analogButtons.r2);
-    draw_text(scene, stickInfo, fontCardDesc, BOX_X + 30, BOX_Y + 362, COLOR_BLUE_BRIGHT);
+    draw_text(scene, stickInfo, fontFooter, BOX_X + 28, BOX_Y + 344, COLOR_BLUE_BRIGHT);
 
     bool tpClick = (padData.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD) != 0;
     bool anyDpad = (padData.buttons & (ORBIS_PAD_BUTTON_UP | ORBIS_PAD_BUTTON_DOWN | ORBIS_PAD_BUTTON_LEFT | ORBIS_PAD_BUTTON_RIGHT)) != 0;
     char tpInfo[160];
-    snprintf(tpInfo, sizeof(tpInfo), "Panel Táctil: %s (%d dedos: %d,%d) | Cruceta: %s",
+    snprintf(tpInfo, sizeof(tpInfo), "Táctil: %s (%d dedos) | Cruceta: %s",
              tpClick ? "CLIC ACTIVO" : "Reposo",
              (int)padData.touch.fingers,
-             (int)padData.touch.touch[0].x, (int)padData.touch.touch[0].y,
              anyDpad ? "PULSADA" : "Reposo");
-    draw_text(scene, tpInfo, fontCardDesc, BOX_X + 30, BOX_Y + 388, (tpClick || anyDpad) ? Color{ 0, 255, 160 } : COLOR_WHITE);
-    draw_text(scene, "Pulsa [CUADRADO] para probar la vibración del DS4.", fontCardDesc, BOX_X + 30, BOX_Y + 418, Color{ 0, 255, 160 });
+    draw_text(scene, tpInfo, fontFooter, BOX_X + 28, BOX_Y + 370, (tpClick || anyDpad) ? Color{ 0, 255, 160 } : COLOR_WHITE);
+    draw_text(scene, "Pulsa [CUADRADO] para probar la vibración en este mando.", fontFooter, BOX_X + 28, BOX_Y + 400, Color{ 0, 255, 160 });
 
-    // Dynamic Option Explanation Panel for DualShock 4
     static const char* ds4What[TOTAL_CARDS] = {
         "Define cómo controla el demonio la barra de luz frontal del DualShock 4 tanto en la consola como en juegos.",
         "Elige el tono RGB específico que mostrará la barra luminosa cuando uses Color Personalizado o Respiración.",
@@ -2057,7 +2066,7 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
         int mi = (cfg.ds4_lightbar_mode >= 0 && cfg.ds4_lightbar_mode < 6) ? cfg.ds4_lightbar_mode : 0;
         ds4Eff = mEff[mi];
     } else if (ds4Sel == 1) {
-        ds4Eff = std::string("Color seleccionado: ") + cardValues[1] + " (el demonio mantiene este color fijo en segundo plano al salir).";
+        ds4Eff = std::string("Color seleccionado: ") + cardValues[1] + " (el demonio mantiene este color fijo en segundo plano para esta ranura).";
     } else if (ds4Sel == 2) {
         static const char* bEff[3] = {
             "Alto (100%): brillo completo estándar de Sony en la barra LED del DualShock 4.",
@@ -2091,20 +2100,23 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
     draw_option_guide_box(scene, cardTitles[ds4Sel], ds4What[ds4Sel], ds4Eff.c_str(), COLOR_ACCENT_INDIGO);
 
     // Footer
-    scene->DrawRectangle(56, 865, 1808, 2, COLOR_DIVIDER);
-    draw_image(scene, iconRumble, 56, 890);
-    draw_text(scene, "Módulo Nativo DualShock 4 (PS4)", fontCardTitle, 116, 912, COLOR_WHITE);
-    draw_text(scene, "Los cambios de color y brillo se aplican inmediatamente a tu mando PS4", fontFooter, 116, 938, COLOR_BLUE_BRIGHT);
+    scene->DrawRectangle(56, 862, 1808, 2, COLOR_DIVIDER);
+    draw_image(scene, iconRumble, 56, 888);
+    draw_text(scene, "Módulo Nativo DualShock 4 (PS4)", fontCardTitle, 116, 910, COLOR_WHITE);
+    draw_text(scene, "Cada jugador DualShock 4 conserva su configuración propia por ranura", fontFooter, 116, 936, COLOR_BLUE_BRIGHT);
 
-    draw_image(scene, btnSquare, 1160, 897);
-    draw_text(scene, "Probar Vibración", fontFooter, 1205, 922, Color{ 0, 255, 150 });
+    draw_image(scene, btnL3, 965, 895);
+    draw_text(scene, "Mando", fontFooter, 1010, 920, COLOR_WHITE);
 
-    draw_image(scene, btnArrows, 1370, 901);
-    draw_text(scene, "Ajustar", fontFooter, 1424, 922, COLOR_TEXT_DIM);
+    draw_image(scene, btnSquare, 1125, 895);
+    draw_text(scene, "Probar Vibración", fontFooter, 1170, 920, Color{ 0, 255, 150 });
 
-    draw_image(scene, btnCross, 1540, 897);
-    draw_text(scene, "Guardar", fontFooter, 1585, 922, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnArrows, 1370, 899);
+    draw_text(scene, "Ajustar", fontFooter, 1424, 920, COLOR_TEXT_DIM);
 
-    draw_image(scene, btnOptions, 1690, 900);
-    draw_text(scene, "Salir", fontFooter, 1770, 922, COLOR_TEXT_DIM);
+    draw_image(scene, btnCross, 1540, 895);
+    draw_text(scene, "Guardar", fontFooter, 1585, 920, COLOR_BLUE_BRIGHT);
+
+    draw_image(scene, btnOptions, 1690, 898);
+    draw_text(scene, "Salir", fontFooter, 1770, 920, COLOR_TEXT_DIM);
 }

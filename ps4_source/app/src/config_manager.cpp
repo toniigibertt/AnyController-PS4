@@ -103,7 +103,7 @@ ConfigManager::ConfigManager() {
     config.set_defaults();
 }
 
-bool ConfigManager::file_exists(const char* path) {
+bool ConfigManager::file_exists(const char* path) const {
     int fd = sceKernelOpen(path, O_RDONLY, 0);
     if (fd >= 0) {
         sceKernelClose(fd);
@@ -119,23 +119,9 @@ static std::string trim(const std::string& str) {
     return str.substr(first, (last - first + 1));
 }
 
-bool ConfigManager::load() {
-    const char* path_to_load = INI_FILE_PATH;
-    if (!file_exists(INI_FILE_PATH)) {
-        if (file_exists(INI_FILE_PATH_USER)) {
-            path_to_load = INI_FILE_PATH_USER;
-        } else {
-            // First run: file does not exist yet! Create it with defaults.
-            config.set_defaults();
-            save();
-            return true;
-        }
-    }
-
-    // File exists: load and parse current values
-    config.set_defaults();
-
-    int fd = sceKernelOpen(path_to_load, O_RDONLY, 0);
+bool ConfigManager::parse_ini_file(const char* path) {
+    if (!path) return false;
+    int fd = sceKernelOpen(path, O_RDONLY, 0);
     if (fd < 0) {
         return false;
     }
@@ -254,28 +240,38 @@ bool ConfigManager::load() {
         }
         line = strtok(NULL, "\r\n");
     }
-
     return true;
 }
 
-bool ConfigManager::save() {
-    mkdir("/data", 0777);
-    mkdir("/data/anycontroller", 0777);
-    mkdir("/user", 0777);
-    mkdir("/user/data", 0777);
-    mkdir("/user/data/anycontroller", 0777);
+bool ConfigManager::load() {
+    const char* path_to_load = INI_FILE_PATH;
+    if (!file_exists(INI_FILE_PATH)) {
+        if (file_exists(INI_FILE_PATH_USER)) {
+            path_to_load = INI_FILE_PATH_USER;
+        } else {
+            // First run: file does not exist yet! Create it with defaults.
+            config.set_defaults();
+            save();
+            return true;
+        }
+    }
 
-    char out[2560];
-    int deadzone_val = DEADZONE_VALUES[config.deadzone_index];
-    int trigger_val = TRIGGER_VALUES[config.trigger_index];
+    // File exists: load and parse current values
+    config.set_defaults();
+    return parse_ini_file(path_to_load);
+}
+
+static int format_ini_buffer(const AppConfig& config, char* out, size_t out_sz, const std::string& targetId) {
+    int deadzone_val = ConfigManager::DEADZONE_VALUES[config.deadzone_index];
+    int trigger_val = ConfigManager::TRIGGER_VALUES[config.trigger_index];
     int swap_val = (config.swap_index != 0) ? 1 : 0;
     int rumble_val = (config.rumble_index == 0) ? 1 : 0;
     int switch_val = (config.switch_index == 0) ? 1 : 0;
 
-    int len = snprintf(out, sizeof(out),
+    return snprintf(out, out_sz,
         "# ANYCONTROLLER Daemon - Archivo de Configuracion\n"
-        "# Generado por Controller Control Center PS4 (v1.4.1)\n"
-        "# Ubicacion en PS4: /data/anycontroller/anycontroller.ini\n"
+        "# Generado por Controller Control Center PS4 (v1.5.0)\n"
+        "# Perfil: %s\n"
         "\n"
         "[Deadzone]\n"
         "stick_deadzone = %d\n"
@@ -309,6 +305,7 @@ bool ConfigManager::save() {
         "ds4_rumble_boost = %d\n"
         "ds4_touchpad_mode = %d\n"
         "ds4_gyro_deadband = %d\n",
+        targetId.empty() ? "Global (/data/anycontroller/anycontroller.ini)" : targetId.c_str(),
         deadzone_val,
         config.stick_curve_index,
         trigger_val,
@@ -332,6 +329,17 @@ bool ConfigManager::save() {
         config.ds4_touchpad_mode,
         config.ds4_gyro_deadband
     );
+}
+
+bool ConfigManager::save() {
+    mkdir("/data", 0777);
+    mkdir("/data/anycontroller", 0777);
+    mkdir("/user", 0777);
+    mkdir("/user/data", 0777);
+    mkdir("/user/data/anycontroller", 0777);
+
+    char out[2560];
+    int len = format_ini_buffer(config, out, sizeof(out), "");
 
     const char* target_paths[2] = {
         INI_FILE_PATH,
@@ -351,4 +359,82 @@ bool ConfigManager::save() {
     }
 
     return any_written;
+}
+
+bool ConfigManager::loadTarget(const std::string& targetId) {
+    currentTargetId = targetId;
+    bool ok = load();
+    if (targetId.empty()) {
+        return ok;
+    }
+
+    char path1[256];
+    char path2[256];
+    snprintf(path1, sizeof(path1), "/data/anycontroller/controllers/%s.ini", targetId.c_str());
+    snprintf(path2, sizeof(path2), "/user/data/anycontroller/controllers/%s.ini", targetId.c_str());
+
+    if (file_exists(path1)) {
+        return parse_ini_file(path1);
+    }
+    if (file_exists(path2)) {
+        return parse_ini_file(path2);
+    }
+    return ok;
+}
+
+bool ConfigManager::saveTarget(const std::string& targetId) {
+    currentTargetId = targetId;
+    if (targetId.empty()) {
+        return save();
+    }
+
+    mkdir("/data", 0777);
+    mkdir("/data/anycontroller", 0777);
+    mkdir("/data/anycontroller/controllers", 0777);
+    mkdir("/user", 0777);
+    mkdir("/user/data", 0777);
+    mkdir("/user/data/anycontroller", 0777);
+    mkdir("/user/data/anycontroller/controllers", 0777);
+
+    char out[2560];
+    int len = format_ini_buffer(config, out, sizeof(out), targetId);
+
+    char path1[256];
+    char path2[256];
+    snprintf(path1, sizeof(path1), "/data/anycontroller/controllers/%s.ini", targetId.c_str());
+    snprintf(path2, sizeof(path2), "/user/data/anycontroller/controllers/%s.ini", targetId.c_str());
+
+    const char* paths[2] = { path1, path2 };
+    bool any_written = false;
+    for (int i = 0; i < 2; i++) {
+        int fd = sceKernelOpen(paths[i], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd >= 0) {
+            if (len > 0) {
+                ssize_t wr = sceKernelWrite(fd, out, (size_t)len);
+                if (wr == len) any_written = true;
+            }
+            sceKernelClose(fd);
+        }
+    }
+    return any_written;
+}
+
+bool ConfigManager::clearTarget(const std::string& targetId) {
+    if (targetId.empty()) return false;
+    char path1[256];
+    char path2[256];
+    snprintf(path1, sizeof(path1), "/data/anycontroller/controllers/%s.ini", targetId.c_str());
+    snprintf(path2, sizeof(path2), "/user/data/anycontroller/controllers/%s.ini", targetId.c_str());
+    sceKernelUnlink(path1);
+    sceKernelUnlink(path2);
+    return loadTarget(targetId);
+}
+
+bool ConfigManager::hasCustomTarget(const std::string& targetId) const {
+    if (targetId.empty()) return false;
+    char path1[256];
+    char path2[256];
+    snprintf(path1, sizeof(path1), "/data/anycontroller/controllers/%s.ini", targetId.c_str());
+    snprintf(path2, sizeof(path2), "/user/data/anycontroller/controllers/%s.ini", targetId.c_str());
+    return file_exists(path1) || file_exists(path2);
 }

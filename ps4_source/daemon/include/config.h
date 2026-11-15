@@ -14,6 +14,7 @@ extern DaemonConfig g_daemon_config;
 
 void daemon_config_init_defaults(DaemonConfig *cfg);
 void daemon_config_load(DaemonConfig *cfg);
+void daemon_config_load_device(DaemonConfig *cfg, const char *device_ini_filename);
 bool daemon_config_check_reload(DaemonConfig *cfg);
 
 #endif // DAEMON_CONFIG_H

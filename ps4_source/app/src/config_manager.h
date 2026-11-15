@@ -148,9 +148,17 @@ public:
     bool load();
     bool save();
 
+    bool loadTarget(const std::string& targetId);
+    bool saveTarget(const std::string& targetId);
+    bool clearTarget(const std::string& targetId);
+    bool hasCustomTarget(const std::string& targetId) const;
+    const std::string& getCurrentTargetId() const { return currentTargetId; }
+
     AppConfig& getConfig() { return config; }
 
 private:
     AppConfig config;
-    bool file_exists(const char* path);
+    std::string currentTargetId;
+    bool file_exists(const char* path) const;
+    bool parse_ini_file(const char* path);
 };

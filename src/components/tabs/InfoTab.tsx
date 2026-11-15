@@ -1,10 +1,15 @@
 /**
- * OneFamily PS4 - Pestaña de Información, Guías y Actualizador en Español (Info Tab)
- * Documentación completa, guía de atajos de Touchpad, instalador de payload y visor de .INI
+ * Controller Control Center PS4 - Pestaña de Sistema, Red y Descargas (v1.5.0)
+ * Documentación completa, visor/importador .INI por mando y notas de versión 1.5.0.
  */
 import { useState } from 'react';
-import { AppConfig } from '../../types';
-import { generateOneFamilyIni, parseOneFamilyIni, downloadFile, downloadBinaryFile } from '../../utils/iniGenerator';
+import { AppConfig, ControllerTargetMeta } from '../../types';
+import {
+  generateOneFamilyIni,
+  parseOneFamilyIni,
+  downloadFile,
+  downloadBinaryFile,
+} from '../../utils/iniGenerator';
 import {
   Info,
   CheckCircle2,
@@ -12,11 +17,7 @@ import {
   Download,
   Upload,
   Terminal,
-  HelpCircle,
-  ExternalLink,
   BookOpen,
-  Cpu,
-  Layers,
   Sparkles,
   Gamepad2,
   ShieldCheck,
@@ -27,15 +28,23 @@ interface InfoTabProps {
   config: AppConfig;
   onChangeConfig: (newConfig: AppConfig) => void;
   onShowToast: (msg: string) => void;
+  activeTarget?: ControllerTargetMeta;
 }
 
 export default function InfoTab({
   config,
   onChangeConfig,
   onShowToast,
+  activeTarget,
 }: InfoTabProps) {
-  const [activeSection, setActiveSection] = useState<'overview' | 'guides' | 'ini' | 'changelog'>('overview');
-  const iniContent = generateOneFamilyIni(config);
+  const [activeSection, setActiveSection] = useState<
+    'overview' | 'guides' | 'ini' | 'changelog'
+  >('overview');
+
+  const iniContent = generateOneFamilyIni(config, {
+    targetPath: activeTarget?.ps4FullPath,
+    targetLabel: activeTarget?.label,
+  });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -47,32 +56,35 @@ export default function InfoTab({
       if (text) {
         const loadedConfig = parseOneFamilyIni(text, config);
         onChangeConfig(loadedConfig);
-        onShowToast('¡Archivo anycontroller.ini cargado y aplicado correctamente!');
+        onShowToast(
+          `Archivo .INI importado y guardado en ${activeTarget?.shortLabel || 'Global'}.`
+        );
       }
     };
     reader.readAsText(file);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Navigation Sub-tabs */}
-      <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-white/10">
+    <div className="space-y-5">
+      {/* Sub-navigation */}
+      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-slate-800">
         {[
-          { id: 'overview', label: 'Resumen y Estado', icon: Info },
-          { id: 'guides', label: 'Guía de Conexión y Atajos', icon: BookOpen },
+          { id: 'overview', label: 'Resumen y Descargas', icon: Info },
+          { id: 'guides', label: 'Guía y Memoria por Mando', icon: BookOpen },
           { id: 'ini', label: 'Visor y Editor .INI', icon: FileText },
-          { id: 'changelog', label: 'Novedades y Mejoras (v1.4.1)', icon: Sparkles },
+          { id: 'changelog', label: 'Novedades v1.5.0', icon: Sparkles },
         ].map((sec) => {
           const Icon = sec.icon;
           const isSelected = activeSection === sec.id;
           return (
             <button
               key={sec.id}
+              type="button"
               onClick={() => setActiveSection(sec.id as any)}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                 isSelected
-                  ? 'bg-sky-500 text-slate-950 font-bold shadow-[0_0_12px_rgba(56,189,248,0.3)]'
-                  : 'bg-black/40 text-slate-400 hover:text-white border border-white/5'
+                  ? 'bg-cyan-400 text-slate-950 border-cyan-300 font-bold'
+                  : 'bg-[#0B1120] text-slate-300 hover:text-white border-slate-800'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -82,57 +94,61 @@ export default function InfoTab({
         })}
       </div>
 
-      {/* SECTION 1: OVERVIEW & STATUS */}
+      {/* SECTION 1: OVERVIEW & DOWNLOADS */}
       {activeSection === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Card: AnyController Overview */}
-          <div className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30">
-                <ShieldCheck className="w-6 h-6" />
+              <div className="p-2.5 rounded-lg bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Controller Control Center PS4 (ID: TONI88888)</h3>
-                <span className="text-xs text-sky-300 font-semibold font-mono">
-                  Versión: v1.4.1 / SFO 01.41 • Payload: ANYCONTROLLER
+                <h3 className="text-base font-bold text-white">
+                  Controller Control Center PS4
+                </h3>
+                <span className="text-xs text-cyan-300 font-mono">
+                  v1.5.0 (01.50) · ID: TONI88888 · ANYCONTROLLER
                 </span>
               </div>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              <strong>Controller Control Center PS4 v1.4.1</strong> (motor demonio <strong>ANYCONTROLLER</strong>) es una aplicación compañera a 1080p 100% independiente para consolas PlayStation 4 con <strong>GoldHEN</strong>.
-              Incluye <strong>Laboratorio 3D interactivo para PS5 DualSense y PS4 DualShock 4</strong>, aislamiento estricto de perfiles por ranura para DualSense (1 a 4 mandos sin interferencias en el Jugador 1), persistencia continua de colores/efectos RGB y brillo tras salir al menú o juegos, y paneles explicativos en tiempo real para cada opción.
+              Aplicación Homebrew 1080p para PlayStation 4 con <strong>GoldHEN</strong> y demonio en segundo plano{' '}
+              <strong>ANYCONTROLLER</strong>. Incluye probador visual original en 2D para DualSense PS5 y DualShock 4, selector manual entre mandos conectados y memoria independiente persistente por dirección MAC y ranura.
             </p>
 
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-2 text-xs">
-              <div className="flex justify-between">
+            <div className="p-3.5 rounded-lg bg-[#070B14] border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between gap-2">
                 <span className="text-slate-400">Title ID / Content ID:</span>
-                <span className="font-mono text-indigo-300 font-bold">TONI88888 (UP9000-TONI88888_00-ANYCONTROLLERPS4)</span>
+                <span className="font-mono text-slate-200 font-semibold text-right">
+                  TONI88888 (UP9000-TONI88888_00-ANYCONTROLLERPS4)
+                </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-slate-400">Payload Demonio:</span>
-                <span className="font-mono text-emerald-400 font-bold">ANYCONTROLLER (/data/payloads/anycontroller.bin)</span>
+                <span className="font-mono text-emerald-400 font-semibold text-right">
+                  /data/payloads/anycontroller.bin
+                </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Ruta de Configuración PS4:</span>
-                <span className="font-mono text-sky-300">/data/anycontroller/anycontroller.ini</span>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-400">Perfil Global PS4:</span>
+                <span className="font-mono text-cyan-300 text-right">
+                  /data/anycontroller/anycontroller.ini
+                </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Tasa de Sondeo (Polling Rate):</span>
-                <span className="font-mono text-emerald-400 font-bold">250 Hz (4ms)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Proyecto:</span>
-                <span className="text-slate-300 font-medium">Controller Control Center PS4 - toniigibertt/AnyController-PS4</span>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-400">Memoria por Mando:</span>
+                <span className="font-mono text-cyan-300 text-right">
+                  /data/anycontroller/controllers/ds_mac_*.ini
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Card: GoldHEN Compatibility & Auto-Run */}
-          <div className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-4">
+          <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                <Zap className="w-6 h-6" />
+              <div className="p-2.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <Zap className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">Compatibilidad GoldHEN</h3>
@@ -143,220 +159,221 @@ export default function InfoTab({
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              El demonio se carga automáticamente al encender la consola agregándolo a la lista de inicio automático <code className="text-sky-300 font-mono">payloads.ini</code> de GoldHEN.
+              Al iniciar la aplicación en PS4, instala automáticamente <code className="text-cyan-300 font-mono">anycontroller.bin</code> en GoldHEN y lo añade a <code className="text-cyan-300 font-mono">[AutoRun]</code>.
             </p>
 
-            <div className="p-3.5 rounded-xl bg-black/60 border border-white/10 font-mono text-[11px] text-slate-300 space-y-1">
-              <div className="text-slate-500"># Ubicación del Payload en el disco interno de PS4:</div>
-              <div className="text-sky-300">/data/payloads/anycontroller.bin</div>
-              <div className="text-slate-500 mt-2"># Entorno de inicio en /data/GoldHEN/payloads.ini:</div>
+            <div className="p-3.5 rounded-lg bg-[#070B14] border border-slate-800 font-mono text-[11px] text-slate-300 space-y-1">
+              <div className="text-slate-500"># /data/GoldHEN/payloads.ini</div>
               <div className="text-emerald-400">[AutoRun]</div>
               <div className="text-emerald-400">/data/payloads/anycontroller.bin = 1</div>
             </div>
 
             <div className="flex items-center gap-2 text-xs text-emerald-400">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>Soporte verificado en FW 5.05, 6.72, 9.00, 9.60, 11.00, 12.50, 13.02 y 13.52.</span>
+              <span>Verificado en FW 5.05, 6.72, 9.00, 9.60, 11.00, 12.50 y 13.xx.</span>
             </div>
           </div>
 
-          {/* New Card: Direct Downloads for PS4 */}
-          <div className="md:col-span-2 p-5 rounded-2xl bg-gradient-to-r from-sky-950/60 via-[#0a2750]/50 to-black/60 border border-sky-400/40 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Download className="w-5 h-5 text-sky-400" />
-                  Descargas Oficiales y Paquete Listo para Instalar en PS4
-                </h3>
-                <p className="text-xs text-slate-300">
-                  Archivos compilados listos para tu consola. <strong>No necesitas compilar nada en tu PC.</strong>
-                </p>
-              </div>
+          {/* Direct Downloads Card */}
+          <div className="md:col-span-2 p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-4">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Download className="w-4 h-4 text-cyan-400" />
+                Descargas Oficiales v1.5.0 Listas para Instalar en PS4
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Paquetes compilados, validados y listos para copiar por USB o FTP a tu consola.
+              </p>
             </div>
 
-            {/* Featured All-in-one Pack for DualSense */}
-            <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/80 to-sky-950/80 border border-emerald-400/50 shadow-[0_0_20px_rgba(52,211,153,0.2)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="p-4 rounded-xl bg-[#070E1D] border border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span className="text-sm font-bold text-white">Pack Todo-en-Uno Mando PS5 DualSense</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
-                    Recomendado
+                  <span className="text-sm font-bold text-white">
+                    Pack Todo-en-Uno v1.5.0 (Recomendado)
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
-                  Incluye el <strong>Controller_Control_Center_PS4_v1.4.1.pkg</strong>, el <strong>payload ANYCONTROLLER (anycontroller.bin)</strong> y la <strong>configuración anycontroller.ini</strong> en un solo archivo.
+                  Incluye <strong>Controller_Control_Center_PS4_v1.5.0.pkg</strong>, el payload{' '}
+                  <strong>anycontroller.bin</strong> y <strong>anycontroller.ini</strong>.
                 </p>
               </div>
               <button
+                type="button"
                 onClick={async () => {
-                  onShowToast('Descargando Pack Todo-en-Uno v1.4.1 (PKG + bin + ini)...');
-                  await downloadBinaryFile('/Controller_Control_Center_PS4_Pack_v1.4.1.zip', 'Controller_Control_Center_PS4_Pack_v1.4.1.zip');
-                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.4.1.zip descargado con éxito!');
+                  onShowToast('Descargando Pack Todo-en-Uno v1.5.0...');
+                  await downloadBinaryFile(
+                    '/Controller_Control_Center_PS4_Pack_v1.5.0.zip',
+                    'Controller_Control_Center_PS4_Pack_v1.5.0.zip'
+                  );
+                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.5.0.zip descargado!');
                 }}
-                className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-[0_0_15px_rgba(52,211,153,0.4)] transition-all text-center cursor-pointer"
+                className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Descargar Pack v1.4.1 (.ZIP)</span>
+                <span>Descargar Pack v1.5.0 (.ZIP)</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <button
+                type="button"
                 onClick={async () => {
-                  onShowToast('Iniciando descarga directa de Controller_Control_Center_PS4_v1.4.1.pkg...');
-                  await downloadBinaryFile('/Controller_Control_Center_PS4_v1.4.1.pkg', 'Controller_Control_Center_PS4_v1.4.1.pkg');
-                  onShowToast('¡Controller_Control_Center_PS4_v1.4.1.pkg descargado con éxito!');
+                  onShowToast('Descargando Controller_Control_Center_PS4_v1.5.0.pkg...');
+                  await downloadBinaryFile(
+                    '/Controller_Control_Center_PS4_v1.5.0.pkg',
+                    'Controller_Control_Center_PS4_v1.5.0.pkg'
+                  );
+                  onShowToast('¡Controller_Control_Center_PS4_v1.5.0.pkg descargado!');
                 }}
-                className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-[0_0_15px_rgba(52,211,153,0.3)] transition-all cursor-pointer"
+                className="flex items-center justify-between p-3.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
-                  <span>Descargar .PKG v1.4.1</span>
-                  <span className="text-[10px] text-slate-900 font-normal">Controller_Control_Center_PS4_v1.4.1.pkg</span>
+                  <span>Descargar .PKG v1.5.0</span>
+                  <span className="text-[10px] text-slate-900 font-mono">
+                    Validado OpenOrbis
+                  </span>
                 </div>
                 <Download className="w-4 h-4 shrink-0" />
               </button>
 
               <button
+                type="button"
                 onClick={async () => {
-                  onShowToast('Descargando payload ANYCONTROLLER (anycontroller.bin)...');
+                  onShowToast('Descargando payload ANYCONTROLLER...');
                   await downloadBinaryFile('/anycontroller.bin', 'anycontroller.bin');
                   onShowToast('¡anycontroller.bin descargado!');
                 }}
-                className="flex items-center justify-between p-3.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/15 transition-all cursor-pointer"
+                className="flex items-center justify-between p-3.5 rounded-lg bg-[#070B14] hover:bg-slate-900 text-white font-bold text-xs border border-slate-800 transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
-                  <span>Payload ANYCONTROLLER (.BIN)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">anycontroller.bin (GoldHEN)</span>
+                  <span>Payload GoldHEN (.BIN)</span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    anycontroller.bin
+                  </span>
                 </div>
-                <Download className="w-4 h-4 text-sky-400 shrink-0" />
+                <Download className="w-4 h-4 text-cyan-400 shrink-0" />
               </button>
 
               <button
+                type="button"
                 onClick={() => {
-                  downloadFile('anycontroller.ini', iniContent);
-                  onShowToast('anycontroller.ini descargado listo para transferir a PS4');
+                  downloadFile(
+                    activeTarget?.ps4Filename || 'anycontroller.ini',
+                    iniContent
+                  );
+                  onShowToast(
+                    `${activeTarget?.ps4Filename || 'anycontroller.ini'} descargado.`
+                  );
                 }}
-                className="flex items-center justify-between p-3.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/15 transition-all cursor-pointer"
+                className="flex items-center justify-between p-3.5 rounded-lg bg-[#070B14] hover:bg-slate-900 text-white font-bold text-xs border border-slate-800 transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
-                  <span>Configuración (.INI)</span>
-                  <span className="text-[10px] text-slate-300 font-normal">anycontroller.ini (Tus ajustes)</span>
+                  <span>Exportar .INI Actual</span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {activeTarget?.ps4Filename || 'anycontroller.ini'}
+                  </span>
                 </div>
                 <Download className="w-4 h-4 shrink-0 text-emerald-400" />
               </button>
 
               <button
+                type="button"
                 onClick={async () => {
-                  onShowToast('Descargando código fuente v1.4.1 en español...');
-                  await downloadBinaryFile('/Controller_Control_Center_PS4_Source_v1.4.1.zip', 'Controller_Control_Center_PS4_Source_v1.4.1.zip');
-                  onShowToast('¡Código fuente descargado!');
+                  onShowToast('Descargando código fuente v1.5.0...');
+                  await downloadBinaryFile(
+                    '/Controller_Control_Center_PS4_Source_v1.5.0.zip',
+                    'Controller_Control_Center_PS4_Source_v1.5.0.zip'
+                  );
+                  onShowToast('¡Código fuente v1.5.0 descargado!');
                 }}
-                className="flex items-center justify-between p-3.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 font-bold text-xs border border-purple-500/40 transition-all cursor-pointer"
+                className="flex items-center justify-between p-3.5 rounded-lg bg-[#070B14] hover:bg-slate-900 text-slate-200 font-bold text-xs border border-slate-800 transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
-                  <span>Código Fuente C++ (.ZIP)</span>
-                  <span className="text-[10px] text-purple-300 font-normal">Fuentes v1.4.1 + build_app.sh</span>
+                  <span>Código Fuente (.ZIP)</span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    C / C++ v1.5.0
+                  </span>
                 </div>
-                <Download className="w-4 h-4 text-purple-400 shrink-0" />
+                <Download className="w-4 h-4 text-indigo-400 shrink-0" />
               </button>
             </div>
-
-            {/* Practical Guide on Applying Changes */}
-            <div className="mt-4 p-4 rounded-xl bg-black/60 border border-white/10 space-y-3">
-              <h4 className="text-xs font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Info className="w-4 h-4" />
-                ¿Cómo se aplican los cambios a tu PlayStation 4?
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-300">
-                <div className="p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-1.5">
-                  <span className="font-bold text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Método 1 (Automático desde el PKG)
-                  </span>
-                  <p className="text-slate-400 leading-relaxed">
-                    Al abrir <strong>Controller Control Center PS4</strong> en tu PS4, el instalador copia automáticamente el payload <strong>ANYCONTROLLER</strong> (<code className="text-sky-300 font-mono">/data/payloads/anycontroller.bin</code>), configura <code className="text-sky-300 font-mono">/data/GoldHEN/payloads.ini</code> y guarda todos los cambios en <code className="text-sky-300 font-mono">/data/anycontroller/anycontroller.ini</code>.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg bg-white/[0.02] border border-white/5 space-y-1.5">
-                  <span className="font-bold text-purple-400 flex items-center gap-1">
-                    <Terminal className="w-3.5 h-3.5" /> Método 2 (Actualizaciones Directas por GitHub)
-                  </span>
-                  <p className="text-slate-400 leading-relaxed">
-                    Al subir <code className="text-sky-300 font-mono">Controller_Control_Center_PS4_v1.4.1.pkg</code> a las Releases de tu repositorio <code className="text-sky-300 font-mono">toniigibertt/AnyController-PS4</code>, la aplicación en PS4 detecta nuevas versiones y las descarga directamente con su número de versión a <code className="text-sky-300 font-mono">/data/pkg/</code>.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
 
-      {/* SECTION 2: CONNECTION GUIDES & SHORTCUTS */}
+      {/* SECTION 2: GUIDES & PER-CONTROLLER MEMORY */}
       {activeSection === 'guides' && (
-        <div className="space-y-6">
-          {/* Guide 1: DualSense Bluetooth Pairing */}
-          <div className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-3">
+        <div className="space-y-5">
+          <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-sky-400" />
-              Emparejamiento de Mando Sony DualSense (PS5) por Bluetooth Nativo
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              Cómo funciona la Memoria Independiente por Mando (v1.5.0)
             </h3>
-            <ol className="list-decimal list-inside text-xs text-slate-300 space-y-1.5 pl-2">
-              <li>Apaga el mando DualSense si está encendido.</li>
-              <li>Mantén pulsados simultáneamente el <strong>Botón Crear (Share)</strong> y el <strong>Botón PS</strong> durante 3 segundos hasta que la barra de luz parpadee con destellos azules dobles rápidos (Modo Emparejamiento).</li>
-              <li>En tu consola PS4, ve a <em>Ajustes &gt; Dispositivos &gt; Dispositivos Bluetooth</em>.</li>
-              <li>Selecciona <code className="text-sky-300">Wireless Controller</code> de la lista y confirma la vinculación.</li>
-              <li>¡Listo! AnyController activará automáticamente el reporte de 78 bytes con giroscopio, touchpad, gatillos adaptativos y barra de luz RGB.</li>
-            </ol>
+            <ul className="list-disc list-inside text-xs text-slate-300 space-y-1.5 pl-1">
+              <li>
+                <strong>Perfil Global (<code className="text-cyan-300 font-mono">anycontroller.ini</code>):</strong> Es la plantilla base que heredan todos los mandos recién conectados mientras no los personalices por separado.
+              </li>
+              <li>
+                <strong>Configuración Independiente por Mando:</strong> Selecciona un mando específico con{' '}
+                <kbd className="px-1.5 py-0.5 bg-slate-900 border border-slate-700 rounded">L3</kbd> en PS4 (o arriba en esta web) para ajustar colores, curva, zona muerta (drift), vibración o gatillos sin afectar al otro jugador.
+              </li>
+              <li>
+                <strong>Recuerdo Persistente entre Sesiones:</strong> Cada DualSense PS5 guarda su archivo propio usando su <strong>dirección MAC única</strong> (<code className="text-cyan-300 font-mono">ds_mac_XXXXXXXXXXXX.ini</code>). Al volver a conectarlo mañana o en otra ranura, recupera automáticamente su color, brillo y calibración.
+              </li>
+              <li>
+                <strong>Restaurar a Global:</strong> Pulsa <kbd className="px-1.5 py-0.5 bg-slate-900 border border-slate-700 rounded">R3</kbd> en PS4 o <em>Restaurar a Global</em> aquí para borrar su perfil propio y que vuelva a seguir la configuración Global.
+              </li>
+            </ul>
           </div>
 
-          {/* Guide 2: Universal Touchpad Emulation Combos */}
-          <div className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-3">
+          <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Gamepad2 className="w-4 h-4 text-emerald-400" />
-              Atajos para Emular el Panel Táctil (Touchpad) y Menú PS en Mandos Xbox / PC / Switch
+              Atajos Universales y Navegación sin Solapamientos
             </h3>
-            <p className="text-xs text-slate-300">
-              Dado que los mandos de Xbox y Nintendo no disponen de panel táctil físico, AnyController incluye combinaciones universales libres de conflictos:
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
-              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1 text-xs">
-                <span className="font-bold text-sky-300">Clic de Touchpad Directo</span>
-                <p className="text-slate-400">Pulsa el botón <strong>View / Back</strong> (Mapeo directo predeterminado).</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div className="p-3 rounded-lg bg-[#070B14] border border-slate-800 space-y-1 text-xs">
+                <span className="font-bold text-cyan-300">Cambiar Mando (PS4)</span>
+                <p className="text-slate-400">
+                  Pulsa <kbd className="px-1 bg-slate-900 rounded">L3</kbd> para rotar entre Global y tus mandos conectados.
+                </p>
               </div>
-
-              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1 text-xs">
-                <span className="font-bold text-sky-300">Atajo Combo Touchpad</span>
-                <p className="text-slate-400">Mantén <kbd className="px-1.5 py-0.5 bg-white/10 rounded">L1 + R1 + View</kbd> para forzar el clic del panel táctil en cualquier juego.</p>
+              <div className="p-3 rounded-lg bg-[#070B14] border border-slate-800 space-y-1 text-xs">
+                <span className="font-bold text-cyan-300">Modo Prueba Segura</span>
+                <p className="text-slate-400">
+                  En Laboratorio PS4 pulsa <strong>L1 + R1</strong> o mantén <strong>Options</strong> para salir sin conflictos de botones.
+                </p>
               </div>
-
-              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-1 text-xs">
-                <span className="font-bold text-sky-300">Botón PS Home Alternativo</span>
-                <p className="text-slate-400">Pulsa el <strong>Botón Guía Xbox / Home</strong> o la combinación <kbd className="px-1.5 py-0.5 bg-white/10 rounded">L1 + R1 + Menu</kbd>.</p>
+              <div className="p-3 rounded-lg bg-[#070B14] border border-slate-800 space-y-1 text-xs">
+                <span className="font-bold text-cyan-300">Touchpad en Mandos Xbox</span>
+                <p className="text-slate-400">
+                  Usa el botón <strong>View / Back</strong> o <kbd className="px-1 bg-slate-900 rounded">L1+R1+View</kbd> para abrir mapas.
+                </p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* SECTION 3: INI VIEWER & GENERATOR */}
+      {/* SECTION 3: INI VIEWER */}
       {activeSection === 'ini' && (
-        <div className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-4">
+        <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <FileText className="w-4 h-4 text-sky-400" />
-                Previsualización en Vivo de /data/anycontroller/anycontroller.ini
+                <FileText className="w-4 h-4 text-cyan-400" />
+                Previsualización: {activeTarget?.ps4FullPath || '/data/anycontroller/anycontroller.ini'}
               </h3>
               <p className="text-xs text-slate-400">
-                Archivo listo para copiar a tu consola PS4 mediante cliente FTP o memoria USB.
+                Copia este archivo por FTP o USB para aplicar este perfil exacto en tu consola.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs border border-white/10 cursor-pointer transition-colors">
-                <Upload className="w-3.5 h-3.5 text-sky-400" />
+              <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#070B14] hover:bg-slate-900 text-white font-medium text-xs border border-slate-700 cursor-pointer transition-colors">
+                <Upload className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Cargar .INI</span>
                 <input
                   type="file"
@@ -367,66 +384,74 @@ export default function InfoTab({
               </label>
 
               <button
+                type="button"
                 onClick={() => {
-                  downloadFile('anycontroller.ini', iniContent);
-                  onShowToast('Archivo anycontroller.ini descargado correctamente');
+                  downloadFile(
+                    activeTarget?.ps4Filename || 'anycontroller.ini',
+                    iniContent
+                  );
+                  onShowToast(
+                    `Archivo ${activeTarget?.ps4Filename || 'anycontroller.ini'} descargado.`
+                  );
                 }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Descargar .INI</span>
+                <span>Descargar {activeTarget?.ps4Filename || '.INI'}</span>
               </button>
             </div>
           </div>
 
-          <pre className="p-4 rounded-xl bg-black/80 border border-white/10 font-mono text-xs text-sky-300 overflow-x-auto max-h-[350px] leading-relaxed">
+          <pre className="p-4 rounded-lg bg-[#050A14] border border-slate-800 font-mono text-xs text-cyan-300 overflow-x-auto max-h-[360px] leading-relaxed">
             {iniContent}
           </pre>
         </div>
       )}
 
-      {/* SECTION 4: CHANGELOG & BUGFIXES */}
+      {/* SECTION 4: CHANGELOG v1.5.0 */}
       {activeSection === 'changelog' && (
-        <div className="p-5 rounded-2xl bg-black/40 border border-white/10 space-y-4">
+        <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-sky-400" />
-            Novedades de Controller Control Center PS4 v1.4.1 (Payload: ANYCONTROLLER • ID: TONI88888)
+            <Terminal className="w-4 h-4 text-cyan-400" />
+            Novedades Controller Control Center PS4 v1.5.0 (01.50)
           </h3>
 
-          <div className="space-y-3 text-xs text-slate-300 divide-y divide-white/5">
+          <div className="space-y-3 text-xs text-slate-300 divide-y divide-slate-800">
             <div className="pt-2">
-              <h4 className="font-bold text-sky-300">
-                ★ Nuevo Laboratorio 3D Interactivo (DualSense PS5 y DualShock 4 PS4) — v1.4.1
+              <h4 className="font-bold text-cyan-300">
+                1. Memoria Independiente por Mando y Persistencia por MAC / Ranura
               </h4>
-              <p className="text-slate-400 mt-0.5">
-                Sustituida la tabla estática de botones por un <strong>mando en 3D animado en tiempo real</strong> tanto en la app PS4 como en la web compañera. Cambia automáticamente entre DualSense PS5 y DualShock 4, inclina los sticks L3/R3, gira/pulsa los gatillos L2/R2, sincroniza la barra LED RGB y dispara ondas luminosas al pulsar cada botón o vibrar los motores.
+              <p className="text-slate-400 mt-1">
+                Ahora los ajustes globales sirven como base, pero en cuanto personalizas un mando concreto (color, brillo, drift, gatillos o vibración), se guarda de forma independiente en{' '}
+                <code className="text-cyan-300 font-mono">/data/anycontroller/controllers/ds_mac_&lt;MAC&gt;.ini</code> (DualSense) o{' '}
+                <code className="text-cyan-300 font-mono">ds4_slot_&lt;1-4&gt;.ini</code> (DualShock 4). Si lo desconectas y lo vuelves a encender mañana, el demonio recarga su perfil al instante.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                1. Aislamiento Total del 2.º DualSense (Jugador 1 y Botón PS Intactos)
+                2. Nuevo Probador Original 2D PS5 DualSense y PS4 DualShock 4
               </h4>
-              <p className="text-slate-400 mt-0.5">
-                Eliminada la fuga de entradas entre ranuras (<code className="text-sky-300 font-mono">mirror_to_slot0</code>) que hacía que el 2.º DualSense moviese el perfil 1 en la pantalla de inicio y bloquease el botón PS del Jugador 1. Cada mando DualSense mantiene ahora su sesión Mbus y botón PS completamente independientes.
+              <p className="text-slate-400 mt-1">
+                Sustituye al visor 3D anterior por siluetas originales detalladas de DualSense PS5 y DualShock 4 con vista superior de gatillos y bumpers (<code className="font-mono text-slate-200">L2 · L1 · LED · R1 · R2</code>) y encendido en vivo de cada botón, palanca y panel táctil.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                2. Persistencia Real de Colores LED, Brillo y Ajustes Tras Cerrar el PKG
+                3. Cambio Manual entre Mandos Conectados sin Robar Ranuras
               </h4>
-              <p className="text-slate-400 mt-0.5">
-                El demonio ahora conserva sus manejadores <code className="text-sky-300 font-mono">scePad</code> por usuario en segundo plano y refresca continuamente el color LED, brillo, gatillos, vibración y efectos Arcoíris/Respiración al salir al menú de PS4 o entrar a juegos, evitando que el sistema los restablezca al azul por defecto.
+              <p className="text-slate-400 mt-1">
+                Selector manual en toda la app (<kbd className="px-1 bg-slate-900 rounded">L3</kbd> en PS4, clic directo en Web) y en el Laboratorio para inspeccionar y vibrar un mando concreto (Jugador 1..4) sin saltar automáticamente ni interferir con los demás jugadores.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                3. Guía Explicativa en Vivo en cada Opción y Flechas de Scroll en DualShock 4
+                4. Eliminación Total de Solapamientos y Conflictos de Botones
               </h4>
-              <p className="text-slate-400 mt-0.5">
-                Panel descriptivo inferior en <strong>Ajustes Globales</strong>, <strong>DualSense PS5</strong> y <strong>DualShock 4</strong> que explica qué modifica exactamente la opción seleccionada y el efecto del valor activo, además de indicadores de desplazamiento <code className="text-sky-300 font-mono">^ / v</code> en la pestaña DualShock 4.
+              <p className="text-slate-400 mt-1">
+                Reorganizado el pie de controles, separadas acciones duplicadas (como <code className="font-mono text-slate-200">TRIANGLE</code> en Información o salida segura con <code className="font-mono text-slate-200">L1+R1</code> / mantener <code className="font-mono text-slate-200">OPTIONS</code> en Modo Prueba), y limpieza visual en todas las tarjetas.
               </p>
             </div>
           </div>

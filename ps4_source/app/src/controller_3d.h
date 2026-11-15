@@ -12,7 +12,8 @@ public:
     void update(float dt, uint32_t buttons, int rumblePhase);
     void render(Scene2D* scene, int vx, int vy, int vw, int vh,
                 bool isDualSense, const AppConfig& cfg,
-                const OrbisPadData& padData, int rumblePhase);
+                const OrbisPadData& padData, int rumblePhase,
+                int playerSlot = 0);
 
 private:
     float m_time;

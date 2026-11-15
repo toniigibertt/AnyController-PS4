@@ -129,6 +129,8 @@ typedef struct {
 static VPadSlotState g_slots[VPAD_MAX_SLOTS];
 static int32_t s_ds4_handles[SCE_USER_SERVICE_MAX_LOGIN_USERS] = { -1, -1, -1, -1 };
 static SceUserServiceUserId s_ds4_uids[SCE_USER_SERVICE_MAX_LOGIN_USERS] = { -1, -1, -1, -1 };
+static DaemonConfig s_ds4_slot_cfgs[VPAD_MAX_SLOTS];
+static bool s_ds4_cfgs_loaded = false;
 
 static scePadInit_t                          p_scePadInit = NULL;
 static scePadMbusInit_t                      p_scePadMbusInit = NULL;
@@ -803,11 +805,43 @@ static uint8_t compute_breathing_scale(uint64_t now_us) {
     return (uint8_t)pct;
 }
 
+void vpad_reload_ds4_configs(void) {
+    for (int i = 0; i < VPAD_MAX_SLOTS; i++) {
+        char fname[32];
+        snprintf(fname, sizeof(fname), "ds4_slot_%d.ini", i + 1);
+        daemon_config_load_device(&s_ds4_slot_cfgs[i], fname);
+    }
+    s_ds4_cfgs_loaded = true;
+}
+
+bool vpad_has_dynamic_ds4_lightbar(void) {
+    if (!s_ds4_cfgs_loaded) vpad_reload_ds4_configs();
+    for (int i = 0; i < VPAD_MAX_SLOTS; i++) {
+        if (s_ds4_slot_cfgs[i].ds4_lightbar_mode == 4 || s_ds4_slot_cfgs[i].ds4_lightbar_mode == 5) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool vpad_has_custom_ds4_lightbar(void) {
+    if (!s_ds4_cfgs_loaded) vpad_reload_ds4_configs();
+    for (int i = 0; i < VPAD_MAX_SLOTS; i++) {
+        if (s_ds4_slot_cfgs[i].ds4_lightbar_mode != 0 || s_ds4_slot_cfgs[i].ds4_brightness != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void vpad_apply_ds4_lightbar(void) {
     if (vpad_ensure_subsystem() != 0) {
         return;
     }
     init_user_service();
+    if (!s_ds4_cfgs_loaded) {
+        vpad_reload_ds4_configs();
+    }
 
     static const uint8_t ds4_colors[7][3] = {
         { 0, 112, 220 },   // 0: Azul PS4
@@ -877,10 +911,11 @@ void vpad_apply_ds4_lightbar(void) {
         }
 
         if (pad_handle >= 0 && !is_our_virtual_handle(pad_handle)) {
-            int br = g_daemon_config.ds4_brightness;
+            const DaemonConfig *ds4_cfg = &s_ds4_slot_cfgs[i];
+            int br = ds4_cfg->ds4_brightness;
             if (br < 0 || br > 2) br = 0;
 
-            int hw_base_br = (g_daemon_config.ds4_lightbar_mode == 3) ? 2 : br;
+            int hw_base_br = (ds4_cfg->ds4_lightbar_mode == 3) ? 2 : br;
             if (p_sceUserServiceSetLightBarBaseBrightness) {
                 p_sceUserServiceSetLightBarBaseBrightness(uid, hw_base_br);
             }
@@ -889,16 +924,16 @@ void vpad_apply_ds4_lightbar(void) {
             }
 
             int apply_rc = 0;
-            if (g_daemon_config.ds4_lightbar_mode == 0 && br == 0) {
+            if (ds4_cfg->ds4_lightbar_mode == 0 && br == 0) {
                 if (p_scePadResetLightBar) {
                     apply_rc = p_scePadResetLightBar(pad_handle);
                 }
             } else if (p_scePadSetLightBar) {
                 OrbisPadColor col = { 0, 0, 0, 0 };
-                int idx = g_daemon_config.ds4_lightbar_color;
+                int idx = ds4_cfg->ds4_lightbar_color;
                 if (idx < 0 || idx > 6) idx = 0;
 
-                if (g_daemon_config.ds4_lightbar_mode == 3) {
+                if (ds4_cfg->ds4_lightbar_mode == 3) {
                     col.r = 0; col.g = 0; col.b = 0; col.a = 0;
                     apply_rc = p_scePadSetLightBar(pad_handle, &col);
                     if (apply_rc != 0) {
@@ -906,16 +941,16 @@ void vpad_apply_ds4_lightbar(void) {
                         apply_rc = p_scePadSetLightBar(pad_handle, &col);
                     }
                 } else {
-                    if (g_daemon_config.ds4_lightbar_mode == 2) {
+                    if (ds4_cfg->ds4_lightbar_mode == 2) {
                         col.r = 16; col.g = 220; col.b = 110;
-                    } else if (g_daemon_config.ds4_lightbar_mode == 4) {
+                    } else if (ds4_cfg->ds4_lightbar_mode == 4) {
                         compute_rainbow_rgb(now_us, &col.r, &col.g, &col.b);
-                    } else if (g_daemon_config.ds4_lightbar_mode == 5) {
+                    } else if (ds4_cfg->ds4_lightbar_mode == 5) {
                         uint8_t bscale = compute_breathing_scale(now_us);
                         col.r = (uint8_t)((ds4_colors[idx][0] * bscale) / 100);
                         col.g = (uint8_t)((ds4_colors[idx][1] * bscale) / 100);
                         col.b = (uint8_t)((ds4_colors[idx][2] * bscale) / 100);
-                    } else if (g_daemon_config.ds4_lightbar_mode == 0) {
+                    } else if (ds4_cfg->ds4_lightbar_mode == 0) {
                         col.r = ds4_colors[0][0];
                         col.g = ds4_colors[0][1];
                         col.b = ds4_colors[0][2];
@@ -1569,9 +1604,15 @@ void vpad_poll_rumble(void) {
                 g_slots[i].stop_retries_remaining = 0;
             }
 
+            int bt_enable_rumble = g_daemon_config.enable_rumble;
+            int bt_lb_mode = g_daemon_config.dualsense_lightbar_mode;
+            if (g_slots[i].source == VPAD_SOURCE_BT) {
+                bt_driver_get_slot_config(i, &bt_enable_rumble, &bt_lb_mode);
+            }
+
             bool rumble_changed = (lg != g_slots[i].last_rumble_lg || sm != g_slots[i].last_rumble_sm);
             bool color_changed = (g_slots[i].source == VPAD_SOURCE_BT &&
-                                 g_daemon_config.dualsense_lightbar_mode == 0 &&
+                                 bt_lb_mode == 0 &&
                                  (cr != g_slots[i].last_color_r || cg != g_slots[i].last_color_g || cb != g_slots[i].last_color_b));
             bool keepalive = ((lg > 0 || sm > 0) && (now - g_slots[i].last_rumble_send_us >= 100000ULL));
 
@@ -1608,9 +1649,9 @@ void vpad_poll_rumble(void) {
                 g_slots[i].last_rumble_send_us = now;
 
                 if (g_slots[i].source == VPAD_SOURCE_BT) {
-                    if (g_daemon_config.enable_rumble || (lg == 0 && sm == 0) || color_changed) {
-                        uint8_t out_lg = g_daemon_config.enable_rumble ? lg : 0;
-                        uint8_t out_sm = g_daemon_config.enable_rumble ? sm : 0;
+                    if (bt_enable_rumble || (lg == 0 && sm == 0) || color_changed) {
+                        uint8_t out_lg = bt_enable_rumble ? lg : 0;
+                        uint8_t out_sm = bt_enable_rumble ? sm : 0;
                         uint8_t color[3] = {
                             cr > 63 ? 255 : (uint8_t)(cr * 4),
                             cg > 63 ? 255 : (uint8_t)(cg * 4),
@@ -1619,8 +1660,10 @@ void vpad_poll_rumble(void) {
                         bt_driver_send_rumble_slot(i, out_lg, out_sm, color);
                     }
                 } else if (g_slots[i].source == VPAD_SOURCE_USB) {
-                    if (g_daemon_config.enable_rumble || (lg == 0 && sm == 0)) {
-                        int boost = g_daemon_config.ds4_rumble_boost;
+                    if (!s_ds4_cfgs_loaded) vpad_reload_ds4_configs();
+                    const DaemonConfig *usb_cfg = &s_ds4_slot_cfgs[i];
+                    if (usb_cfg->enable_rumble || (lg == 0 && sm == 0)) {
+                        int boost = usb_cfg->ds4_rumble_boost;
                         uint16_t scaled_lg = lg;
                         uint16_t scaled_sm = sm;
                         if (boost == 1) {

@@ -1,8 +1,8 @@
 /**
- * AnyController Studio PS4 - Módulo Nativo para Mandos DualShock 4 (PS4)
- * Control directo de barra de luz frontal, ahorro de batería, motores de vibración y Sixaxis
+ * Controller Control Center PS4 - Módulo Nativo para Mandos DualShock 4 (v1.5.0)
+ * Incluye guía descriptiva en vivo y configuración por ranura de jugador.
  */
-import { AppConfig } from '../../types';
+import { AppConfig, ControllerTargetMeta } from '../../types';
 import {
   DS4_LIGHTBAR_OPTIONS,
   DS4_COLOR_OPTIONS,
@@ -24,6 +24,7 @@ import {
   BatteryCharging,
   ShieldCheck,
   Sparkles,
+  Info,
 } from 'lucide-react';
 
 interface DualShock4TabProps {
@@ -33,6 +34,7 @@ interface DualShock4TabProps {
   onSelectCard: (index: number) => void;
   onTriggerRumble?: (phase: number) => void;
   onShowToast?: (msg: string) => void;
+  activeTarget?: ControllerTargetMeta;
 }
 
 export default function DualShock4Tab({
@@ -42,6 +44,7 @@ export default function DualShock4Tab({
   onSelectCard,
   onTriggerRumble,
   onShowToast,
+  activeTarget,
 }: DualShock4TabProps) {
   const activeHex =
     config.ds4_lightbar_mode === 3
@@ -56,6 +59,8 @@ export default function DualShock4Tab({
       title: 'Modo de Barra Luminosa Frontal (DualShock 4)',
       subtitle:
         'Elige entre color oficial del juego, color fijo personalizado, indicador de batería o apagado total.',
+      guide:
+        'Control del Juego deja que el título decida; Color Personalizado fija el prisma frontal con el color elegido abajo; Apagado maximiza la batería.',
       icon: Palette,
       currentValue: DS4_LIGHTBAR_OPTIONS[config.ds4_lightbar_mode],
       step: (dir: number) => {
@@ -71,6 +76,8 @@ export default function DualShock4Tab({
       title: 'Color Personalizado del Prisma DualShock 4',
       subtitle:
         'Aplica en vivo cualquier color RGB al prisma frontal de tu mando original de PS4 mediante libScePad.',
+      guide:
+        'Cada ranura DualShock 4 puede llevar su propio color guardado de forma independiente sin cambiar el mando de otro jugador.',
       icon: Sparkles,
       currentValue: DS4_COLOR_OPTIONS[config.ds4_lightbar_color],
       colorPreview: DS4_COLOR_HEX[config.ds4_lightbar_color],
@@ -94,6 +101,8 @@ export default function DualShock4Tab({
       title: 'Nivel de Brillo y Ahorro de Batería',
       subtitle:
         'Reduce la potencia luminosa del LED frontal para duplicar la autonomía de tu DualShock 4.',
+      guide:
+        'En 15% (Tenue) el LED apenas molesta en la oscuridad de la habitación y ahorra batería en mandos PS4 V1 y V2.',
       icon: Sun,
       currentValue: DS4_BRIGHTNESS_OPTIONS[config.ds4_brightness],
       step: (dir: number) => {
@@ -109,6 +118,8 @@ export default function DualShock4Tab({
       title: 'Potencia de Motores de Vibración (Pesado / Ligero)',
       subtitle:
         'Ajusta la intensidad de los motores asimétricos internos de los mandos originales CUH-ZCT1 y ZCT2.',
+      guide:
+        'Regula la fuerza real de vibración de este mando DualShock 4 entre 60% suave, 100% estándar, 120% intenso o apagado.',
       icon: Vibrate,
       currentValue: DS4_RUMBLE_BOOST_OPTIONS[config.ds4_rumble_boost],
       step: (dir: number) => {
@@ -124,6 +135,8 @@ export default function DualShock4Tab({
       title: 'Respuesta del Panel Táctil Capacitivo PS4',
       subtitle:
         'Configura si deseas detección táctil multi-touch completa o únicamente el clic mecánico físico.',
+      guide:
+        'Solo Clic Físico evita toques accidentales con el pulgar sobre el panel central en juegos competitivos.',
       icon: MousePointerClick,
       currentValue: DS4_TOUCHPAD_OPTIONS[config.ds4_touchpad_mode],
       step: (dir: number) => {
@@ -139,6 +152,8 @@ export default function DualShock4Tab({
       title: 'Filtro de Estabilización del Giroscopio Sixaxis',
       subtitle:
         'Elimina micro-temblores del sensor de movimiento Sixaxis en juegos con apuntado o conducción por giro.',
+      guide:
+        'Suaviza pequeñas vibraciones de la mano cuando usas apuntado por giroscopio en juegos compatibles de PS4.',
       icon: Compass,
       currentValue: DS4_GYRO_OPTIONS[config.ds4_gyro_deadband],
       step: (dir: number) => {
@@ -151,55 +166,50 @@ export default function DualShock4Tab({
     },
   ];
 
+  const activeCardMeta = cards.find((c) => c.id === selectedCard) || cards[0];
+
   return (
-    <div className="space-y-6">
-      {/* Native PS4 DualShock 4 Studio Header Deck */}
-      <div className="relative overflow-hidden rounded-xl bg-[#0B1120] border border-indigo-500/30 p-5 shadow-xl">
-        <div
-          className="absolute top-0 left-0 w-1.5 h-full"
-          style={{ backgroundColor: activeHex }}
-        />
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pl-2">
+    <div className="space-y-5">
+      {/* Native PS4 DualShock 4 Header Deck */}
+      <div className="rounded-xl bg-[#0B1120] border border-slate-800 p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-4">
             <div
-              className="w-12 h-12 rounded-lg border flex items-center justify-center shrink-0 transition-all"
+              className="w-11 h-11 rounded-lg border flex items-center justify-center shrink-0 transition-colors"
               style={{
                 borderColor: activeHex,
                 backgroundColor: `${activeHex}18`,
-                boxShadow: `0 0 24px ${activeHex}40`,
               }}
             >
-              <Gamepad className="w-6 h-6" style={{ color: activeHex }} />
+              <Gamepad className="w-5 h-5" style={{ color: activeHex }} />
             </div>
             <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h2 className="text-base md:text-lg font-bold text-white tracking-tight">
-                  Configurador Nativo Sony DualShock 4 (PS4)
-                </h2>
-                <span className="px-2 py-0.5 text-[11px] font-mono uppercase tracking-wider bg-indigo-950/90 text-indigo-300 border border-indigo-500/30 rounded">
-                  CUH-ZCT1 / CUH-ZCT2
-                </span>
-              </div>
+              <h2 className="text-base md:text-lg font-bold text-white tracking-tight">
+                Configurador Nativo Sony DualShock 4 (CUH-ZCT1 / ZCT2)
+              </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Control nativo directo vía <span className="font-mono text-cyan-400">libScePad</span> • Sin emulación intermedia • Compatible con todos los mandos originales de PS4
+                Editando:{' '}
+                <span className="text-slate-200 font-semibold">
+                  {activeTarget?.label || 'Global (Por Defecto)'}
+                </span>{' '}
+                · Control directo por <span className="font-mono text-cyan-400">libScePad</span> sin interferir con el DualSense
               </p>
             </div>
           </div>
 
-          {/* Interactive Lightbar Prism Preview & Rumble Test */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-3 bg-[#070B14] border border-slate-800 px-3.5 py-2 rounded-lg">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-                Prisma Frontal:
+            <div className="flex items-center gap-2.5 bg-[#070B14] border border-slate-800 px-3 py-1.5 rounded-lg">
+              <span className="text-[11px] font-mono text-slate-400">
+                PRISMA FRONTAL
               </span>
               <div
-                className="w-20 h-3.5 rounded-sm border border-white/30 transition-all duration-300"
+                className="w-16 h-3 rounded-sm border border-white/25 transition-all"
                 style={{
                   backgroundColor: activeHex,
                   boxShadow:
                     config.ds4_lightbar_mode === 3
                       ? 'none'
-                      : `0 0 14px ${activeHex}`,
+                      : `0 0 12px ${activeHex}`,
                   opacity:
                     config.ds4_brightness === 0
                       ? 1
@@ -211,31 +221,34 @@ export default function DualShock4Tab({
             </div>
 
             <button
+              type="button"
               onClick={() => {
                 onTriggerRumble?.(3);
-                onShowToast?.('Probando motores de vibración del mando DualShock 4...');
+                onShowToast?.(
+                  `Probando vibración aislada en ${activeTarget?.shortLabel || 'mando activo'}...`
+                );
               }}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 border border-indigo-500/40 text-xs font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/50 text-xs font-semibold transition-colors cursor-pointer"
             >
-              <Vibrate className="w-4 h-4 text-indigo-400" />
+              <Vibrate className="w-4 h-4 text-indigo-300" />
               <span>Probar Vibración DS4</span>
             </button>
           </div>
         </div>
 
         {/* Fast Color Swatch Bar */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 pl-2">
+        <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-slate-400 font-medium">
             Selección rápida de color para el LED frontal de tu mando PS4:
           </span>
           <div className="flex items-center gap-2">
             {DS4_COLOR_HEX.map((hex, idx) => {
               const isSelectedColor =
-                config.ds4_lightbar_color === idx &&
-                config.ds4_lightbar_mode !== 3;
+                config.ds4_lightbar_color === idx && config.ds4_lightbar_mode !== 3;
               return (
                 <button
                   key={hex}
+                  type="button"
                   onClick={() =>
                     onChangeConfig({
                       ...config,
@@ -243,7 +256,7 @@ export default function DualShock4Tab({
                       ds4_lightbar_color: idx,
                     })
                   }
-                  className={`w-7 h-7 rounded-md border transition-transform cursor-pointer flex items-center justify-center ${
+                  className={`w-7 h-7 rounded-md border transition-transform cursor-pointer ${
                     isSelectedColor
                       ? 'scale-110 border-white ring-2 ring-cyan-400/50'
                       : 'border-white/20 opacity-75 hover:opacity-100'
@@ -257,8 +270,21 @@ export default function DualShock4Tab({
         </div>
       </div>
 
+      {/* Live Descriptive Guide */}
+      <div className="p-4 rounded-xl bg-[#070E1D] border border-cyan-500/30 flex items-start gap-3">
+        <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+        <div className="text-xs">
+          <div className="font-bold text-cyan-300">
+            Qué cambia: {activeCardMeta.title}
+          </div>
+          <p className="text-slate-300 mt-0.5 leading-relaxed">
+            {activeCardMeta.guide}
+          </p>
+        </div>
+      </div>
+
       {/* DualShock 4 Configuration Cards */}
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-2.5">
         {cards.map((card) => {
           const Icon = card.icon;
           const isSelected = selectedCard === card.id;
@@ -267,19 +293,16 @@ export default function DualShock4Tab({
             <div
               key={card.id}
               onClick={() => onSelectCard(card.id)}
-              className={`group relative p-4 rounded-xl border transition-all duration-150 cursor-pointer ${
+              className={`group p-4 rounded-xl border transition-colors cursor-pointer ${
                 isSelected
-                  ? 'bg-[#101C34] border-cyan-400/80 shadow-[0_0_20px_rgba(0,175,255,0.15)]'
+                  ? 'bg-[#101C34] border-cyan-400/80'
                   : 'bg-[#0B1120]/90 hover:bg-[#0E172A] border-slate-800 hover:border-slate-700'
               }`}
             >
-              {isSelected && (
-                <div className="absolute left-0 top-3 bottom-3 w-1 bg-cyan-400 rounded-r" />
-              )}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pl-1">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-start gap-3.5 max-w-2xl">
                   <div
-                    className={`p-2.5 rounded-lg border transition-colors ${
+                    className={`p-2.5 rounded-lg border transition-colors shrink-0 ${
                       isSelected
                         ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-300'
                         : 'bg-slate-900 border-slate-800 text-slate-400 group-hover:text-slate-200'
@@ -288,12 +311,12 @@ export default function DualShock4Tab({
                     <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm md:text-base font-semibold text-white">
                         {card.title}
                       </h3>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-300 font-mono">
-                        {card.code}
+                      <span className="text-[10px] font-mono text-cyan-300/90 tabular-nums">
+                        · {card.code}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -302,11 +325,12 @@ export default function DualShock4Tab({
                   </div>
                 </div>
 
-                {/* Value Selector Box */}
-                <div className="flex items-center self-end md:self-center gap-2 bg-[#070B14] p-1.5 rounded-lg border border-slate-800">
+                <div className="flex items-center self-end md:self-center gap-2 bg-[#070B14] p-1.5 rounded-lg border border-slate-800 shrink-0">
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      onSelectCard(card.id);
                       card.step(-1);
                     }}
                     className="p-1.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors cursor-pointer"
@@ -315,7 +339,7 @@ export default function DualShock4Tab({
                     <ChevronLeft className="w-4 h-4" />
                   </button>
 
-                  <div className="min-w-[210px] sm:min-w-[270px] px-2 flex items-center justify-center gap-2">
+                  <div className="min-w-[200px] sm:min-w-[250px] px-2 flex items-center justify-center gap-2">
                     {card.colorPreview && (
                       <span
                         className="w-3.5 h-3.5 rounded-sm border border-white/40 shrink-0"
@@ -328,8 +352,10 @@ export default function DualShock4Tab({
                   </div>
 
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      onSelectCard(card.id);
                       card.step(1);
                     }}
                     className="p-1.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors cursor-pointer"
@@ -346,7 +372,7 @@ export default function DualShock4Tab({
 
       {/* Bottom Hardware Info Strip */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-        <div className="p-3.5 rounded-xl bg-[#0B1120]/80 border border-slate-800 flex items-center gap-3">
+        <div className="p-3.5 rounded-xl bg-[#0B1120] border border-slate-800 flex items-center gap-3">
           <BatteryCharging className="w-5 h-5 text-emerald-400 shrink-0" />
           <p className="text-xs text-slate-300">
             <strong className="text-white">Ahorro Energético Real:</strong> El modo{' '}
@@ -354,11 +380,14 @@ export default function DualShock4Tab({
             <span className="text-cyan-300">Apagado</span> reduce drásticamente el consumo del LED frontal en mandos PS4 V1 y V2.
           </p>
         </div>
-        <div className="p-3.5 rounded-xl bg-[#0B1120]/80 border border-slate-800 flex items-center gap-3">
+        <div className="p-3.5 rounded-xl bg-[#0B1120] border border-slate-800 flex items-center gap-3">
           <ShieldCheck className="w-5 h-5 text-cyan-400 shrink-0" />
           <p className="text-xs text-slate-300">
-            <strong className="text-white">Separación Total:</strong> Estos ajustes se guardan en la sección{' '}
-            <code className="text-cyan-300 font-mono">[DualShock4]</code> sin interferir con tu mando PS5 DualSense.
+            <strong className="text-white">Memoria Por Jugador:</strong> Guardado en{' '}
+            <code className="text-cyan-300 font-mono">
+              {activeTarget?.ps4Filename || 'ds4_slot_1.ini'}
+            </code>{' '}
+            sin interferir con otros mandos.
           </p>
         </div>
       </div>

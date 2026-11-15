@@ -1,8 +1,8 @@
 /**
- * AnyController Studio PS4 - Módulo Exclusivo para Mandos PlayStation 5 (DualSense / DualSense Edge)
- * Configuración dedicada de reporte Bluetooth de 78 bytes, halo RGB táctil, gatillos adaptativos L2/R2 y audio
+ * Controller Control Center PS4 - Módulo Exclusivo PS5 DualSense / Edge (v1.5.0)
+ * Soporta perfiles independientes por mando (MAC / Ranura) con descripción en vivo por opción.
  */
-import { AppConfig, DualSenseTelemetry } from '../../types';
+import { AppConfig, ControllerTargetMeta, DualSenseTelemetry } from '../../types';
 import {
   DS_BT_MODE_OPTIONS,
   DS_LIGHTBAR_OPTIONS,
@@ -16,7 +16,6 @@ import {
 import {
   Sparkles,
   Bluetooth,
-  BatteryCharging,
   BatteryMedium,
   Palette,
   Sun,
@@ -27,6 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Cpu,
+  Info,
 } from 'lucide-react';
 
 interface DualSenseTabProps {
@@ -34,6 +34,7 @@ interface DualSenseTabProps {
   onChangeConfig: (newConfig: AppConfig) => void;
   selectedCard: number;
   onSelectCard: (index: number) => void;
+  activeTarget?: ControllerTargetMeta;
 }
 
 export default function DualSenseTab({
@@ -41,6 +42,7 @@ export default function DualSenseTab({
   onChangeConfig,
   selectedCard,
   onSelectCard,
+  activeTarget,
 }: DualSenseTabProps) {
   const telemetry: DualSenseTelemetry = {
     connected: true,
@@ -54,7 +56,10 @@ export default function DualSenseTab({
     temperature: 28,
   };
 
-  const activeHex = DS_COLOR_HEX[config.ds_lightbar_color] || '#0070D1';
+  const activeHex =
+    config.ds_lightbar_mode === 3
+      ? '#1E293B'
+      : DS_COLOR_HEX[config.ds_lightbar_color] || '#0070D1';
 
   const cards = [
     {
@@ -62,6 +67,8 @@ export default function DualSenseTab({
       title: 'Modo de Iluminación DualSense (Halo LED Táctil)',
       subtitle:
         'Define el comportamiento del LED lateral que rodea el panel táctil del mando PS5 DualSense.',
+      guide:
+        'Elige color fijo personalizado, indicador de batería real, apagado total, Arcoíris RGB continuo o latido suave. Se conserva en este mando aunque cierres el PKG.',
       icon: Palette,
       currentValue: DS_LIGHTBAR_OPTIONS[config.ds_lightbar_mode],
       step: (dir: number) => {
@@ -77,6 +84,8 @@ export default function DualSenseTab({
       title: 'Color Fijo del Halo DualSense PS5',
       subtitle:
         'Tono estático personalizado para los laterales del panel táctil del mando de PlayStation 5.',
+      guide:
+        'Permite distinguir visualmente cada DualSense (ej. J1 azul y J2 rojo o verde). Se guarda por dirección MAC para recordarlo en futuras sesiones.',
       icon: Sparkles,
       currentValue: DS_COLOR_OPTIONS[config.ds_lightbar_color],
       colorPreview: DS_COLOR_HEX[config.ds_lightbar_color],
@@ -100,6 +109,8 @@ export default function DualSenseTab({
       title: 'Intensidad del Halo Luminoso PS5',
       subtitle:
         'Potencia de brillo del halo RGB y de los indicadores blancos inferiores del mando DualSense.',
+      guide:
+        'Bajar a 50% o 25% reduce reflejos en el televisor de noche y prolonga la autonomía de la batería sin apagar el LED.',
       icon: Sun,
       currentValue: DS_BRIGHTNESS_OPTIONS[config.ds_brightness],
       step: (dir: number) => {
@@ -115,6 +126,8 @@ export default function DualSenseTab({
       title: 'Efecto de Gatillos Adaptativos PS5 (L2 / R2)',
       subtitle:
         'Resistencia mecánica en tiempo real exclusiva de los motores de gatillos adaptativos de PlayStation 5.',
+      guide:
+        'Disparo Rápido acorta el recorrido con tope táctil; Resistencia endurece L2/R2 para conducción; Vibración añade pulso motorizado en el gatillo.',
       icon: Zap,
       currentValue: DS_TRIGGER_OPTIONS[config.ds_trigger_mode],
       step: (dir: number) => {
@@ -130,6 +143,8 @@ export default function DualSenseTab({
       title: 'LEDs Blancos Indicadores de Jugador (Bajo Touchpad)',
       subtitle:
         'Configura los 5 puntos LED blancos inferiores exclusivos de los mandos DualSense y DualSense Edge.',
+      guide:
+        'Por defecto muestra el número de jugador real en PS4 (1 a 4 luces blancas), pero puedes encender los 5 LEDs o apagarlos completamente.',
       icon: Users,
       currentValue: DS_PLAYER_LEDS_OPTIONS[config.ds_player_leds],
       step: (dir: number) => {
@@ -145,9 +160,10 @@ export default function DualSenseTab({
       title: 'Volumen del Altavoz Integrado DualSense',
       subtitle:
         'Nivel de ganancia de audio del altavoz interno del mando PS5 (0% a 100%).',
+      guide:
+        'Controla el volumen máximo enviado al altavoz del DualSense en juegos compatibles cuando está conectado por USB o reporte extendido.',
       icon: Volume2,
       currentValue: `${config.ds_speaker_volume}%`,
-      isSlider: true,
       step: (dir: number) => {
         const next = Math.max(0, Math.min(100, config.ds_speaker_volume + dir * 5));
         onChangeConfig({ ...config, ds_speaker_volume: next });
@@ -159,6 +175,8 @@ export default function DualSenseTab({
       title: 'Función del Botón Físico Mute (Micrófono PS5)',
       subtitle:
         'Permite reasignar el botón físico inferior de micrófono del DualSense para hacer clic rápido del Touchpad.',
+      guide:
+        'Útil si prefieres pulsar el pequeño botón central bajo el logo PS para abrir mapas o marcadores sin soltar el pulgar.',
       icon: Mic,
       currentValue: DS_MUTE_OPTIONS[config.ds_mute_action],
       step: (dir: number) => {
@@ -174,6 +192,8 @@ export default function DualSenseTab({
       title: 'Protocolo Bluetooth DualSense (10B vs 78B)',
       subtitle:
         'El Modo Extendido (78B con CRC-32) activa gatillos adaptativos, giroscopio y control del halo LED en PS5.',
+      guide:
+        'Mantén el Modo Extendido (78B) activado siempre que sea posible; usa 10B solo para diagnóstico en adaptadores Bluetooth muy antiguos.',
       icon: Bluetooth,
       currentValue: DS_BT_MODE_OPTIONS[config.ds_bt_mode],
       step: (dir: number) => {
@@ -186,70 +206,102 @@ export default function DualSenseTab({
     },
   ];
 
+  const activeCardMeta = cards.find((c) => c.id === selectedCard) || cards[0];
+
   return (
-    <div className="space-y-6">
-      {/* Exclusive PS5 DualSense Header Deck */}
-      <div className="relative overflow-hidden rounded-xl bg-[#0B1120] border border-cyan-500/30 p-5 shadow-xl">
-        <div
-          className="absolute top-0 left-0 w-1.5 h-full"
-          style={{ backgroundColor: activeHex }}
-        />
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pl-2">
+    <div className="space-y-5">
+      {/* DualSense Header Deck */}
+      <div className="rounded-xl bg-[#0B1120] border border-slate-800 p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-4">
             <div
-              className="w-12 h-12 rounded-lg border flex items-center justify-center shrink-0 transition-all"
+              className="w-11 h-11 rounded-lg border flex items-center justify-center shrink-0 transition-colors"
               style={{
                 borderColor: activeHex,
                 backgroundColor: `${activeHex}18`,
-                boxShadow: `0 0 24px ${activeHex}40`,
               }}
             >
-              <Sparkles className="w-6 h-6" style={{ color: activeHex }} />
+              <Sparkles className="w-5 h-5" style={{ color: activeHex }} />
             </div>
             <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h2 className="text-base md:text-lg font-bold text-white tracking-tight">
-                  Centro Exclusivo PlayStation 5 (DualSense / DualSense Edge)
-                </h2>
-                <span className="px-2 py-0.5 text-[11px] font-mono uppercase tracking-wider bg-cyan-950/90 text-cyan-300 border border-cyan-500/30 rounded">
-                  SOLO MANDOS PS5 (0x0CE6 / 0x0DF2)
-                </span>
-              </div>
+              <h2 className="text-base md:text-lg font-bold text-white tracking-tight">
+                Centro Exclusivo PlayStation 5 (DualSense / DualSense Edge)
+              </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Protocolo activo:{' '}
-                <span className="font-mono text-cyan-400">
-                  Reporte {telemetry.reportMode} (78 Bytes + CRC32)
+                Editando:{' '}
+                <span className="text-slate-200 font-semibold">
+                  {activeTarget?.label || 'Global (Por Defecto)'}
                 </span>{' '}
-                • Gatillos Adaptativos L2/R2, LEDs de Jugador y Botón Mute exclusivos de PS5
+                · Protocolo:{' '}
+                <span className="font-mono text-cyan-400">
+                  Reporte {telemetry.reportMode}
+                </span>{' '}
+                · Memoria por dirección MAC única
               </p>
             </div>
           </div>
 
-          {/* Telemetry Readouts */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#070B14] border border-emerald-500/40 text-xs">
-              {telemetry.isCharging ? (
-                <BatteryCharging className="w-4 h-4 text-amber-400 animate-pulse" />
-              ) : (
-                <BatteryMedium className="w-4 h-4 text-emerald-400" />
-              )}
-              <span className="text-emerald-300 font-semibold font-mono">
-                J1: {telemetry.batteryPercent}% Exacto (BT) • J2: Listo Selector Perfil PS4
-              </span>
+          <div className="flex flex-wrap items-center gap-2.5 text-xs">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#070B14] border border-slate-800 font-mono tabular-nums text-emerald-300">
+              <BatteryMedium className="w-4 h-4 text-emerald-400" />
+              <span>Batería BT: {telemetry.batteryPercent}%</span>
             </div>
-
-            <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#070B14] border border-cyan-500/40 text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#070B14] border border-slate-800 text-cyan-300">
               <Cpu className="w-4 h-4 text-cyan-400" />
-              <span className="text-cyan-300 font-semibold">
-                Multijugador Local 1-4 Mandos (Auto-Selector "¿Quién usa este mando?")
-              </span>
+              <span>Multi-DualSense Independiente (1-4)</span>
             </div>
+          </div>
+        </div>
+
+        {/* Fast Color Swatch Bar */}
+        <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs text-slate-400 font-medium">
+            Selección rápida de color para el halo de este mando PS5:
+          </span>
+          <div className="flex items-center gap-2">
+            {DS_COLOR_HEX.map((hex, idx) => {
+              const isSelectedColor =
+                config.ds_lightbar_color === idx && config.ds_lightbar_mode !== 3;
+              return (
+                <button
+                  key={hex}
+                  type="button"
+                  onClick={() =>
+                    onChangeConfig({
+                      ...config,
+                      ds_lightbar_mode: 1,
+                      ds_lightbar_color: idx,
+                    })
+                  }
+                  className={`w-7 h-7 rounded-md border transition-transform cursor-pointer ${
+                    isSelectedColor
+                      ? 'scale-110 border-white ring-2 ring-cyan-400/50'
+                      : 'border-white/20 opacity-75 hover:opacity-100'
+                  }`}
+                  style={{ backgroundColor: hex }}
+                  title={DS_COLOR_OPTIONS[idx]}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* DualSense Feature Cards Grid */}
-      <div className="grid grid-cols-1 gap-3">
+      {/* Live Option Guide */}
+      <div className="p-4 rounded-xl bg-[#070E1D] border border-cyan-500/30 flex items-start gap-3">
+        <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+        <div className="text-xs">
+          <div className="font-bold text-cyan-300">
+            Qué cambia: {activeCardMeta.title}
+          </div>
+          <p className="text-slate-300 mt-0.5 leading-relaxed">
+            {activeCardMeta.guide}
+          </p>
+        </div>
+      </div>
+
+      {/* DualSense Feature Cards */}
+      <div className="grid grid-cols-1 gap-2.5">
         {cards.map((card) => {
           const Icon = card.icon;
           const isSelected = selectedCard === card.id;
@@ -258,19 +310,16 @@ export default function DualSenseTab({
             <div
               key={card.id}
               onClick={() => onSelectCard(card.id)}
-              className={`group relative p-4 rounded-xl border transition-all duration-150 cursor-pointer ${
+              className={`group p-4 rounded-xl border transition-colors cursor-pointer ${
                 isSelected
-                  ? 'bg-[#101C34] border-cyan-400/80 shadow-[0_0_20px_rgba(0,175,255,0.15)]'
+                  ? 'bg-[#101C34] border-cyan-400/80'
                   : 'bg-[#0B1120]/90 hover:bg-[#0E172A] border-slate-800 hover:border-slate-700'
               }`}
             >
-              {isSelected && (
-                <div className="absolute left-0 top-3 bottom-3 w-1 bg-cyan-400 rounded-r" />
-              )}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pl-1">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-start gap-3.5 max-w-2xl">
                   <div
-                    className={`p-2.5 rounded-lg border transition-colors ${
+                    className={`p-2.5 rounded-lg border transition-colors shrink-0 ${
                       isSelected
                         ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-300'
                         : 'bg-slate-900 border-slate-800 text-slate-400 group-hover:text-slate-200'
@@ -279,12 +328,12 @@ export default function DualSenseTab({
                     <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm md:text-base font-semibold text-white">
                         {card.title}
                       </h3>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-300 font-mono">
-                        {card.badge}
+                      <span className="text-[10px] font-mono text-cyan-300/90 tabular-nums">
+                        · {card.badge}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -294,10 +343,12 @@ export default function DualSenseTab({
                 </div>
 
                 {/* Right controls */}
-                <div className="flex items-center self-end md:self-center gap-2 bg-[#070B14] p-1.5 rounded-lg border border-slate-800">
+                <div className="flex items-center self-end md:self-center gap-2 bg-[#070B14] p-1.5 rounded-lg border border-slate-800 shrink-0">
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      onSelectCard(card.id);
                       card.step(-1);
                     }}
                     className="p-1.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors cursor-pointer"
@@ -306,21 +357,23 @@ export default function DualSenseTab({
                     <ChevronLeft className="w-4 h-4" />
                   </button>
 
-                  <div className="min-w-[210px] sm:min-w-[270px] px-2 flex items-center justify-center gap-2">
+                  <div className="min-w-[200px] sm:min-w-[250px] px-2 flex items-center justify-center gap-2">
                     {card.colorPreview && (
                       <span
                         className="w-3.5 h-3.5 rounded-sm border border-white/40 shrink-0"
                         style={{ backgroundColor: card.colorPreview }}
                       />
                     )}
-                    <span className="text-xs font-semibold text-cyan-300 line-clamp-1">
+                    <span className="text-xs font-semibold text-cyan-300 line-clamp-1 tabular-nums">
                       {card.currentValue}
                     </span>
                   </div>
 
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      onSelectCard(card.id);
                       card.step(1);
                     }}
                     className="p-1.5 rounded bg-slate-900 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors cursor-pointer"
