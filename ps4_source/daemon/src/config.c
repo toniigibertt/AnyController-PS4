@@ -8,6 +8,7 @@
 #include "log.h"
 #include "daemon_syscalls.h"
 #include "bt_driver.h"
+#include "usb_driver.h"
 #include "vpad.h"
 #include <fcntl.h>
 #include <stdio.h>
@@ -330,7 +331,9 @@ bool daemon_config_check_reload(DaemonConfig *cfg) {
         old.ds4_lightbar_mode != cfg->ds4_lightbar_mode ||
         old.ds4_lightbar_color != cfg->ds4_lightbar_color ||
         old.ds4_brightness != cfg->ds4_brightness ||
-        old.ds4_rumble_boost != cfg->ds4_rumble_boost
+        old.ds4_rumble_boost != cfg->ds4_rumble_boost ||
+        old.ds4_touchpad_mode != cfg->ds4_touchpad_mode ||
+        old.ds4_gyro_deadband != cfg->ds4_gyro_deadband
     );
 
     if (gen_changed) {
@@ -349,6 +352,9 @@ bool daemon_config_check_reload(DaemonConfig *cfg) {
     if (ds4_changed) {
         daemon_log(LOG_LEVEL_INFO, "DualShock 4 configuration changed: applying lightbar settings on the fly!");
         vpad_apply_ds4_lightbar();
+        if (g_usb_state.connected && g_usb_state.type == CONTROLLER_DS4) {
+            usb_driver_send_rumble(0, 0);
+        }
     }
 
     return true;

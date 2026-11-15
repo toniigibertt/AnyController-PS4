@@ -1,6 +1,6 @@
 /**
- * Controller Control Center PS4 - Pestaña de Sistema, Red y Descargas (v1.5.0)
- * Documentación completa, visor/importador .INI por mando y notas de versión 1.5.0.
+ * Controller Control Center PS4 - Pestaña de Sistema, Red y Descargas (v1.5.1)
+ * Documentación completa, visor/importador .INI por mando y notas de versión 1.5.1.
  */
 import { useState } from 'react';
 import { AppConfig, ControllerTargetMeta } from '../../types';
@@ -72,7 +72,7 @@ export default function InfoTab({
           { id: 'overview', label: 'Resumen y Descargas', icon: Info },
           { id: 'guides', label: 'Guía y Memoria por Mando', icon: BookOpen },
           { id: 'ini', label: 'Visor y Editor .INI', icon: FileText },
-          { id: 'changelog', label: 'Novedades v1.5.0', icon: Sparkles },
+          { id: 'changelog', label: 'Novedades v1.5.1', icon: Sparkles },
         ].map((sec) => {
           const Icon = sec.icon;
           const isSelected = activeSection === sec.id;
@@ -107,7 +107,7 @@ export default function InfoTab({
                   Controller Control Center PS4
                 </h3>
                 <span className="text-xs text-cyan-300 font-mono">
-                  v1.5.0 (01.50) · ID: TONI88888 · ANYCONTROLLER
+                  v1.5.1 (01.51) · ID: TONI88888 · ANYCONTROLLER
                 </span>
               </div>
             </div>
@@ -179,7 +179,7 @@ export default function InfoTab({
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Download className="w-4 h-4 text-cyan-400" />
-                Descargas Oficiales v1.5.0 Listas para Instalar en PS4
+                Descargas Oficiales v1.5.1 Listas para Instalar en PS4
               </h3>
               <p className="text-xs text-slate-400 mt-1">
                 Paquetes compilados, validados y listos para copiar por USB o FTP a tu consola.
@@ -191,28 +191,28 @@ export default function InfoTab({
                 <div className="flex flex-wrap items-center gap-2">
                   <Sparkles className="w-4 h-4 text-emerald-400" />
                   <span className="text-sm font-bold text-white">
-                    Pack Todo-en-Uno v1.5.0 (Recomendado)
+                    Pack Todo-en-Uno v1.5.1 (Recomendado)
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
-                  Incluye <strong>Controller_Control_Center_PS4_v1.5.0.pkg</strong>, el payload{' '}
+                  Incluye <strong>Controller_Control_Center_PS4_v1.5.1.pkg</strong>, el payload{' '}
                   <strong>anycontroller.bin</strong> y <strong>anycontroller.ini</strong>.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={async () => {
-                  onShowToast('Descargando Pack Todo-en-Uno v1.5.0...');
+                  onShowToast('Descargando Pack Todo-en-Uno v1.5.1...');
                   await downloadBinaryFile(
-                    '/Controller_Control_Center_PS4_Pack_v1.5.0.zip',
-                    'Controller_Control_Center_PS4_Pack_v1.5.0.zip'
+                    '/Controller_Control_Center_PS4_Pack_v1.5.1.zip',
+                    'Controller_Control_Center_PS4_Pack_v1.5.1.zip'
                   );
-                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.5.0.zip descargado!');
+                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.5.1.zip descargado!');
                 }}
                 className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Descargar Pack v1.5.0 (.ZIP)</span>
+                <span>Descargar Pack v1.5.1 (.ZIP)</span>
               </button>
             </div>
 
@@ -220,17 +220,17 @@ export default function InfoTab({
               <button
                 type="button"
                 onClick={async () => {
-                  onShowToast('Descargando Controller_Control_Center_PS4_v1.5.0.pkg...');
+                  onShowToast('Descargando Controller_Control_Center_PS4_v1.5.1.pkg...');
                   await downloadBinaryFile(
-                    '/Controller_Control_Center_PS4_v1.5.0.pkg',
-                    'Controller_Control_Center_PS4_v1.5.0.pkg'
+                    '/Controller_Control_Center_PS4_v1.5.1.pkg',
+                    'Controller_Control_Center_PS4_v1.5.1.pkg'
                   );
-                  onShowToast('¡Controller_Control_Center_PS4_v1.5.0.pkg descargado!');
+                  onShowToast('¡Controller_Control_Center_PS4_v1.5.1.pkg descargado!');
                 }}
                 className="flex items-center justify-between p-3.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
-                  <span>Descargar .PKG v1.5.0</span>
+                  <span>Descargar .PKG v1.5.1</span>
                   <span className="text-[10px] text-slate-900 font-mono">
                     Validado OpenOrbis
                   </span>
@@ -281,19 +281,19 @@ export default function InfoTab({
               <button
                 type="button"
                 onClick={async () => {
-                  onShowToast('Descargando código fuente v1.5.0...');
+                  onShowToast('Descargando código fuente v1.5.1...');
                   await downloadBinaryFile(
-                    '/Controller_Control_Center_PS4_Source_v1.5.0.zip',
-                    'Controller_Control_Center_PS4_Source_v1.5.0.zip'
+                    '/Controller_Control_Center_PS4_Source_v1.5.1.zip',
+                    'Controller_Control_Center_PS4_Source_v1.5.1.zip'
                   );
-                  onShowToast('¡Código fuente v1.5.0 descargado!');
+                  onShowToast('¡Código fuente v1.5.1 descargado!');
                 }}
                 className="flex items-center justify-between p-3.5 rounded-lg bg-[#070B14] hover:bg-slate-900 text-slate-200 font-bold text-xs border border-slate-800 transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
                   <span>Código Fuente (.ZIP)</span>
                   <span className="text-[10px] text-slate-400 font-mono">
-                    C / C++ v1.5.0
+                    C / C++ v1.5.1
                   </span>
                 </div>
                 <Download className="w-4 h-4 text-indigo-400 shrink-0" />
@@ -309,7 +309,7 @@ export default function InfoTab({
           <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-cyan-400" />
-              Cómo funciona la Memoria Independiente por Mando (v1.5.0)
+              Cómo funciona la Memoria Independiente por Mando (v1.5.1)
             </h3>
             <ul className="list-disc list-inside text-xs text-slate-300 space-y-1.5 pl-1">
               <li>
@@ -343,7 +343,7 @@ export default function InfoTab({
               <div className="p-3 rounded-lg bg-[#070B14] border border-slate-800 space-y-1 text-xs">
                 <span className="font-bold text-cyan-300">Modo Prueba Segura</span>
                 <p className="text-slate-400">
-                  En Laboratorio PS4 pulsa <strong>L1 + R1</strong> o mantén <strong>Options</strong> para salir sin conflictos de botones.
+                  En Laboratorio PS4 mantén <strong>OPTIONS</strong> para salir y liberar L1, R1, L3 y ✕ sin conflictos de botones.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-[#070B14] border border-slate-800 space-y-1 text-xs">
@@ -408,50 +408,48 @@ export default function InfoTab({
         </div>
       )}
 
-      {/* SECTION 4: CHANGELOG v1.5.0 */}
+      {/* SECTION 4: CHANGELOG v1.5.1 */}
       {activeSection === 'changelog' && (
         <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Terminal className="w-4 h-4 text-cyan-400" />
-            Novedades Controller Control Center PS4 v1.5.0 (01.50)
+            Novedades Controller Control Center PS4 v1.5.1 (01.51)
           </h3>
 
           <div className="space-y-3 text-xs text-slate-300 divide-y divide-slate-800">
             <div className="pt-2">
               <h4 className="font-bold text-cyan-300">
-                1. Memoria Independiente por Mando y Persistencia por MAC / Ranura
+                1. Conexión Directa del 1.er DualSense sin Quedar Colgado el DualShock 4
               </h4>
               <p className="text-slate-400 mt-1">
-                Ahora los ajustes globales sirven como base, pero en cuanto personalizas un mando concreto (color, brillo, drift, gatillos o vibración), se guarda de forma independiente en{' '}
-                <code className="text-cyan-300 font-mono">/data/anycontroller/controllers/ds_mac_&lt;MAC&gt;.ini</code> (DualSense) o{' '}
-                <code className="text-cyan-300 font-mono">ds4_slot_&lt;1-4&gt;.ini</code> (DualShock 4). Si lo desconectas y lo vuelves a encender mañana, el demonio recarga su perfil al instante.
+                Corregida la regresión en el demonio <code className="font-mono text-slate-200">ANYCONTROLLER</code> donde el primer DualSense en <code className="font-mono text-slate-200">AUTO</code> no apagaba ni desvinculaba correctamente el DualShock 4 físico ni llamaba a <code className="font-mono text-slate-200">sceMbusBindDeviceWithUserId</code> para el Jugador 1.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                2. Nuevo Probador Original 2D PS5 DualSense y PS4 DualShock 4
+                2. Colores RGB y Ajustes Reales en Mandos PS4 DualShock 4
               </h4>
               <p className="text-slate-400 mt-1">
-                Sustituye al visor 3D anterior por siluetas originales detalladas de DualSense PS5 y DualShock 4 con vista superior de gatillos y bumpers (<code className="font-mono text-slate-200">L2 · L1 · LED · R1 · R2</code>) y encendido en vivo de cada botón, palanca y panel táctil.
+                Eliminado el conflicto entre el demonio y la aplicación sobre la barra LED (<code className="font-mono text-slate-200">app_foreground</code> + sincronización de <code className="font-mono text-slate-200">ds4_*</code>), ahora los colores, modos de iluminación, intensidad de vibración y bloqueo táctil se aplican en vivo y persisten en cada ranura DualShock 4.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                3. Cambio Manual entre Mandos Conectados sin Robar Ranuras
+                3. Encuadre TV Safe Area 100% Visible (Cero Recortes en Televisores)
               </h4>
               <p className="text-slate-400 mt-1">
-                Selector manual en toda la app (<kbd className="px-1 bg-slate-900 rounded">L3</kbd> en PS4, clic directo en Web) y en el Laboratorio para inspeccionar y vibrar un mando concreto (Jugador 1..4) sin saltar automáticamente ni interferir con los demás jugadores.
+                Reajustada toda la interfaz 1080p de PS4 dentro del margen seguro de overscan para televisor (<code className="font-mono text-slate-200">X: 96–1824</code>, <code className="font-mono text-slate-200">Y: 72–996</code>), evitando que títulos o tarjetas queden fuera de pantalla.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                4. Eliminación Total de Solapamientos y Conflictos de Botones
+                4. Botones con Una Sola Función y Mandos Originales 2D de Mayor Calidad
               </h4>
               <p className="text-slate-400 mt-1">
-                Reorganizado el pie de controles, separadas acciones duplicadas (como <code className="font-mono text-slate-200">TRIANGLE</code> en Información o salida segura con <code className="font-mono text-slate-200">L1+R1</code> / mantener <code className="font-mono text-slate-200">OPTIONS</code> en Modo Prueba), y limpieza visual en todas las tarjetas.
+                Separadas todas las acciones dobles en Modo Prueba, pestaña DualSense y pie de navegación, y mejorados los trazos, texturas micro-punto en el panel táctil y detalle de ambos mandos originales PS5 DualSense y PS4 DualShock 4.
               </p>
             </div>
           </div>

@@ -116,8 +116,33 @@ static void request_daemon_rebind_profile() {
     }
 }
 
+static void set_app_foreground_marker(bool active) {
+    const char* fg_paths[2] = {
+        "/data/anycontroller/app_foreground",
+        "/user/data/anycontroller/app_foreground"
+    };
+    if (active) {
+        mkdir("/data", 0777);
+        mkdir("/data/anycontroller", 0777);
+        mkdir("/user", 0777);
+        mkdir("/user/data", 0777);
+        mkdir("/user/data/anycontroller", 0777);
+        for (int i = 0; i < 2; i++) {
+            int fd = sceKernelOpen(fg_paths[i], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (fd >= 0) {
+                sceKernelWrite(fd, "1\n", 2);
+                sceKernelClose(fd);
+            }
+        }
+    } else {
+        for (int i = 0; i < 2; i++) {
+            sceKernelUnlink(fg_paths[i]);
+        }
+    }
+}
+
 typedef int (*scePadSetLightBarBaseBrightness_t)(int handle, int brightness);
-typedef int (*sceUserServiceSetLightBarBaseBrightness_t)(int userId, int brightness);
+typedef int (*sceUserServiceSetVibrationEnabled_t)(int userId, bool enabled);
 
 static AppConfig s_slotDs4Cfgs[4];
 static bool s_slotDs4Dirty = true;
@@ -141,7 +166,9 @@ static void sync_slot_ds4_configs(const AppConfig& activeCfg, const std::string&
 static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots[4], const AppConfig slotCfgs[4]) {
     static bool s_resolved = false;
     static scePadSetLightBarBaseBrightness_t s_padSetBaseBr = NULL;
-    static sceUserServiceSetLightBarBaseBrightness_t s_userSetBaseBr = NULL;
+    static sceUserServiceSetVibrationEnabled_t s_userSetVibEn = NULL;
+    static int s_last_base_br[4] = { -1, -1, -1, -1 };
+    static int s_last_vib_en[4] = { -1, -1, -1, -1 };
     if (!s_resolved) {
         s_resolved = true;
         int padMod = sceKernelLoadStartModule("libScePad.sprx", 0, NULL, 0, NULL, NULL);
@@ -150,7 +177,7 @@ static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots
         }
         int usrMod = sceKernelLoadStartModule("libSceUserService.sprx", 0, NULL, 0, NULL, NULL);
         if (usrMod >= 0) {
-            sceKernelDlsym(usrMod, "sceUserServiceSetLightBarBaseBrightness", (void**)&s_userSetBaseBr);
+            sceKernelDlsym(usrMod, "sceUserServiceSetVibrationEnabled", (void**)&s_userSetVibEn);
         }
     }
 
@@ -171,7 +198,10 @@ static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots
     bool hasUsers = (sceUserServiceGetLoginUserIdList(&userList) == 0);
 
     for (int i = 0; i < 4; i++) {
-        if (padHandles[i] < 0) continue;
+        if (padHandles[i] < 0) {
+            s_last_base_br[i] = -1;
+            continue;
+        }
 
         // El halo RGB del DualSense PS5 en esta ranura lo controla directamente el demonio via reporte BT 0x31
         if (btClaimedSlots && btClaimedSlots[i]) {
@@ -179,15 +209,21 @@ static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots
         }
 
         const AppConfig& cfg = slotCfgs[i];
+        if (hasUsers && userList.userId[i] != ORBIS_USER_SERVICE_USER_ID_INVALID && s_userSetVibEn) {
+            int vibEn = (cfg.rumble_index == 0 && cfg.ds4_rumble_boost != 3) ? 1 : 0;
+            if (s_last_vib_en[i] != vibEn) {
+                s_last_vib_en[i] = vibEn;
+                s_userSetVibEn(userList.userId[i], vibEn ? true : false);
+            }
+        }
+
         int br = cfg.ds4_brightness;
         if (br < 0 || br > 2) br = 0;
         int hw_base_br = (cfg.ds4_lightbar_mode == 3) ? 2 : br;
 
-        if (s_padSetBaseBr) {
+        if (s_padSetBaseBr && s_last_base_br[i] != hw_base_br) {
+            s_last_base_br[i] = hw_base_br;
             s_padSetBaseBr(padHandles[i], hw_base_br);
-        }
-        if (s_userSetBaseBr && hasUsers && userList.userId[i] != ORBIS_USER_SERVICE_USER_ID_INVALID) {
-            s_userSetBaseBr(userList.userId[i], hw_base_br);
         }
 
         if (cfg.ds4_lightbar_mode == 0 && br == 0) {
@@ -239,17 +275,21 @@ static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots
         }
 
         if (br == 1) {
-            col.r = (uint8_t)((col.r * 25) / 100);
-            col.g = (uint8_t)((col.g * 25) / 100);
-            col.b = (uint8_t)((col.b * 25) / 100);
-        } else if (br == 2) {
             uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
-            col.r = (uint8_t)((col.r * 5) / 100);
-            col.g = (uint8_t)((col.g * 5) / 100);
-            col.b = (uint8_t)((col.b * 5) / 100);
+            col.r = (uint8_t)((col.r * 50) / 100);
+            col.g = (uint8_t)((col.g * 50) / 100);
+            col.b = (uint8_t)((col.b * 50) / 100);
             if (orig_r > 0 && col.r == 0) col.r = 1;
             if (orig_g > 0 && col.g == 0) col.g = 1;
             if (orig_b > 0 && col.b == 0) col.b = 1;
+        } else if (br == 2) {
+            uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
+            col.r = (uint8_t)((col.r * 15) / 100);
+            col.g = (uint8_t)((col.g * 15) / 100);
+            col.b = (uint8_t)((col.b * 15) / 100);
+            if (orig_r > 0 && col.r == 0) col.r = 2;
+            if (orig_g > 0 && col.g == 0) col.g = 2;
+            if (orig_b > 0 && col.b == 0) col.b = 2;
         }
         scePadSetLightBar(padHandles[i], &col);
     }
@@ -293,6 +333,7 @@ int main() {
 
     // Purge any legacy onefamily files/directories on every launch
     Installer::cleanupLegacyOneFamily();
+    set_app_foreground_marker(true);
 
     // Initialize Config Manager
     // NOTE: If /data/anycontroller/anycontroller.ini does not exist,
@@ -388,6 +429,8 @@ int main() {
         }
 
         if (exitAfterWizard) {
+            set_app_foreground_marker(false);
+            notify_daemon_reload();
             for (int i = 0; i < 4; i++) {
                 if (padHandles[i] >= 0) {
                     scePadClose(padHandles[i]);
@@ -642,7 +685,7 @@ int main() {
                 break;
             }
         }
-        if (frameID % 30 == 0) {
+        if (frameID % 30 == 0 || (currentTabId == TAB_DUALSHOCK4 && (frameID % 10 == 0))) {
             sync_slot_ds4_configs(configMgr.getConfig(), activeTargetId, true);
             apply_live_pad_lightbar(padHandles, btClaimedSlots, s_slotDs4Cfgs);
         } else if (anyDs4Animated && (frameID % 3 == 0)) {
@@ -910,43 +953,38 @@ int main() {
         } else if (currentTabId == TAB_TESTER) {
             // --- TESTER & CALIBRATION TAB ---
             if (tester.testMode) {
-                bool l1r1Combo = ((curButtons & (ORBIS_PAD_BUTTON_L1 | ORBIS_PAD_BUTTON_R1)) == (ORBIS_PAD_BUTTON_L1 | ORBIS_PAD_BUTTON_R1)) &&
-                                 ((justPressed & (ORBIS_PAD_BUTTON_L1 | ORBIS_PAD_BUTTON_R1)) != 0);
                 if (curButtons & ORBIS_PAD_BUTTON_OPTIONS) {
                     tester.testModeHoldFrames++;
                 } else {
                     tester.testModeHoldFrames = 0;
                 }
-                if (l1r1Combo || tester.testModeHoldFrames >= 45) {
+                if (tester.testModeHoldFrames >= 45) {
                     tester.testMode = false;
                     tester.testModeHoldFrames = 0;
                     toastText = "Modo Prueba Libre desactivado";
                     toastFrames = 120;
                 }
             } else {
-                // Interactive 5-Row Menu (zero overlapping dual-function controls!)
+                // Interactive 5-Row Menu (100% single unambiguous function per button!)
                 if (justPressed & ORBIS_PAD_BUTTON_UP) {
                     tester.testerMenuRow = (tester.testerMenuRow + 4) % 5;
                 }
                 if (justPressed & ORBIS_PAD_BUTTON_DOWN) {
                     tester.testerMenuRow = (tester.testerMenuRow + 1) % 5;
                 }
-                if (justPressed & ORBIS_PAD_BUTTON_L3) {
-                    tester.selectedSlot = (tester.selectedSlot + 1) % 4;
-                }
 
                 if (tester.testerMenuRow == 0) {
                     if (justPressed & ORBIS_PAD_BUTTON_LEFT) {
                         tester.selectedSlot = (tester.selectedSlot + 3) % 4;
                     }
-                    if (justPressed & (ORBIS_PAD_BUTTON_RIGHT | ORBIS_PAD_BUTTON_CROSS)) {
+                    if (justPressed & ORBIS_PAD_BUTTON_RIGHT) {
                         tester.selectedSlot = (tester.selectedSlot + 1) % 4;
                     }
                 } else if (tester.testerMenuRow == 1) {
                     if (justPressed & ORBIS_PAD_BUTTON_LEFT) {
                         tester.testerModelOverride = (tester.testerModelOverride + 2) % 3;
                     }
-                    if (justPressed & (ORBIS_PAD_BUTTON_RIGHT | ORBIS_PAD_BUTTON_CROSS)) {
+                    if (justPressed & ORBIS_PAD_BUTTON_RIGHT) {
                         tester.testerModelOverride = (tester.testerModelOverride + 1) % 3;
                     }
                 } else if (tester.testerMenuRow == 2) {
@@ -977,20 +1015,30 @@ int main() {
                 }
             }
 
-            // Real-time processing for Isolated Slot Rumble Test
+            // Real-time processing for Isolated Slot Rumble Test (respects rumble_index & ds4_rumble_boost)
             if (tester.rumbleFrames > 0) {
                 tester.rumbleFrames--;
                 OrbisPadVibeParam vibe;
                 if (tester.rumbleFrames > 120) {
                     tester.rumblePhase = 1;
-                    vibe.lgMotor = 255;
+                    vibe.lgMotor = 220;
                     vibe.smMotor = 0;
                 } else if (tester.rumbleFrames > 60) {
                     tester.rumblePhase = 2;
                     vibe.lgMotor = 0;
-                    vibe.smMotor = 255;
+                    vibe.smMotor = 220;
                 } else {
                     tester.rumblePhase = 3;
+                    vibe.lgMotor = 220;
+                    vibe.smMotor = 220;
+                }
+                if (cfg.rumble_index != 0 || cfg.ds4_rumble_boost == 3) {
+                    vibe.lgMotor = 0;
+                    vibe.smMotor = 0;
+                } else if (cfg.ds4_rumble_boost == 1) {
+                    vibe.lgMotor = (uint8_t)((vibe.lgMotor * 60U) / 100U);
+                    vibe.smMotor = (uint8_t)((vibe.smMotor * 60U) / 100U);
+                } else if (cfg.ds4_rumble_boost == 2) {
                     vibe.lgMotor = 255;
                     vibe.smMotor = 255;
                 }
@@ -1038,7 +1086,7 @@ int main() {
                     tester.calib.suggestedIndex = bestIdx;
                 }
             } else if (!btClaimedSlots[tester.selectedSlot]) {
-                // Apply configured deadzone, trigger threshold, and L1/L2 swap live in Tester when previewing DS4 slot
+                // Apply configured deadzone, trigger threshold, L1/L2 swap, and touchpad mode live in Tester when previewing DS4 slot
                 int dz = ConfigManager::DEADZONE_VALUES[cfg.deadzone_index];
                 if (dz > 0) {
                     int lx = (int)padData.leftStick.x - 128;
@@ -1059,6 +1107,11 @@ int main() {
                 else padData.buttons &= ~ORBIS_PAD_BUTTON_L2;
                 if (padData.analogButtons.r2 >= th) padData.buttons |= ORBIS_PAD_BUTTON_R2;
                 else padData.buttons &= ~ORBIS_PAD_BUTTON_R2;
+
+                if (cfg.ds4_touchpad_mode == 1) {
+                    padData.touch.fingers = 0;
+                    memset(padData.touch.touch, 0, sizeof(padData.touch.touch));
+                }
 
                 if (cfg.swap_index != 0) {
                     bool l1 = (padData.buttons & ORBIS_PAD_BUTTON_L1) != 0;
@@ -1160,15 +1213,7 @@ int main() {
                 }
             }
 
-            // Toggle Mute on SQUARE when on Speaker Volume card
-            if ((justPressed & ORBIS_PAD_BUTTON_SQUARE) && dsSelectedCard == 5) {
-                if (cfg.ds_speaker_volume > 0) {
-                    cfg.ds_speaker_volume = 0;
-                } else {
-                    cfg.ds_speaker_volume = 80;
-                }
-                saveAndApplyActiveTarget();
-            }
+            // Speaker volume adjusted strictly via LEFT/RIGHT (0%..100%) with no conflicting SQUARE shortcut
 
             // Open PS4 User Profile Selector ("¿Quién está usando este mando?") on TRIANGLE
             if (justPressed & ORBIS_PAD_BUTTON_TRIANGLE) {
@@ -1386,7 +1431,8 @@ int main() {
         frameID++;
     }
 
-    // Persist active profile & flush daemon reload before releasing scePad handles
+    // Persist active profile & release foreground lock before closing handles so daemon takes over immediately
+    set_app_foreground_marker(false);
     configMgr.saveTarget(activeTargetId);
     notify_daemon_reload();
     usleep(250000);

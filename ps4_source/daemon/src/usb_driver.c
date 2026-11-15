@@ -1633,10 +1633,38 @@ void usb_driver_send_rumble(uint8_t large_motor, uint8_t small_motor) {
         };
         int c_idx = g_daemon_config.ds4_lightbar_color;
         if (c_idx < 0 || c_idx > 6) c_idx = 0;
+        int mode = g_daemon_config.ds4_lightbar_mode;
+        uint8_t r = ds4_colors[c_idx][0];
+        uint8_t g = ds4_colors[c_idx][1];
+        uint8_t b = ds4_colors[c_idx][2];
+        if (mode == 0) {
+            r = ds4_colors[0][0]; g = ds4_colors[0][1]; b = ds4_colors[0][2];
+        } else if (mode == 2) {
+            r = 16; g = 220; b = 110;
+        } else if (mode == 3) {
+            r = 0; g = 0; b = 0;
+        } else if (mode == 4) {
+            uint64_t now_us = daemon_sys_time_us();
+            uint32_t ph = (uint32_t)((now_us / 3921ULL) % 1530ULL);
+            uint32_t reg = ph / 255;
+            uint8_t rem = (uint8_t)(ph % 255);
+            if (reg == 0) { r = 255; g = rem; b = 0; }
+            else if (reg == 1) { r = 255 - rem; g = 255; b = 0; }
+            else if (reg == 2) { r = 0; g = 255; b = rem; }
+            else if (reg == 3) { r = 0; g = 255 - rem; b = 255; }
+            else if (reg == 4) { r = rem; g = 0; b = 255; }
+            else { r = 255; g = 0; b = 255 - rem; }
+        } else if (mode == 5) {
+            uint32_t ms = (uint32_t)((daemon_sys_time_us() / 1000ULL) % 3000ULL);
+            uint32_t pct = (ms < 1500) ? (10 + (ms * 90) / 1500) : (100 - ((ms - 1500) * 90) / 1500);
+            r = (uint8_t)((r * pct) / 100);
+            g = (uint8_t)((g * pct) / 100);
+            b = (uint8_t)((b * pct) / 100);
+        }
         int scale = 100;
-        if (g_daemon_config.ds4_lightbar_mode == 3) scale = 0;
-        else if (g_daemon_config.ds4_brightness == 1) scale = 35;
-        else if (g_daemon_config.ds4_brightness == 2) scale = 10;
+        if (mode == 3) scale = 0;
+        else if (g_daemon_config.ds4_brightness == 1) scale = 50;
+        else if (g_daemon_config.ds4_brightness == 2) scale = 15;
 
         DS4OutputReport pkt;
         memset(&pkt, 0, sizeof(pkt));
@@ -1644,9 +1672,9 @@ void usb_driver_send_rumble(uint8_t large_motor, uint8_t small_motor) {
         pkt.valid_flag0 = 0x07; // Rumble + LED valid
         pkt.motor_right = small_motor;
         pkt.motor_left = large_motor;
-        pkt.lightbar_red   = (uint8_t)((ds4_colors[c_idx][0] * scale) / 100);
-        pkt.lightbar_green = (uint8_t)((ds4_colors[c_idx][1] * scale) / 100);
-        pkt.lightbar_blue  = (uint8_t)((ds4_colors[c_idx][2] * scale) / 100);
+        pkt.lightbar_red   = (uint8_t)((r * scale) / 100);
+        pkt.lightbar_green = (uint8_t)((g * scale) / 100);
+        pkt.lightbar_blue  = (uint8_t)((b * scale) / 100);
         if (ep != 0) {
             int ret = p_sceUsbdInterruptTransfer(g_dev_handle, ep, (uint8_t*)&pkt, sizeof(pkt), &transferred, rumble_timeout_ms);
             if (ret != 0) {

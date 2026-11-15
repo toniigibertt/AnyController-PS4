@@ -82,6 +82,7 @@ typedef int (*sceUserServiceGetUserName_t)(SceUserServiceUserId userId, char *us
 typedef int (*sceUserServiceLogin_t)(SceUserServiceUserId userId);
 typedef int (*sceUserServiceLogout_t)(SceUserServiceUserId userId);
 typedef int (*sceUserServiceSetLightBarBaseBrightness_t)(SceUserServiceUserId userId, int32_t brightness);
+typedef int (*sceUserServiceSetVibrationEnabled_t)(SceUserServiceUserId userId, bool enabled);
 
 static int g_hMbus = 0;
 static int g_hPad = 0;
@@ -175,6 +176,9 @@ static sceUserServiceGetUserName_t                 p_sceUserServiceGetUserName =
 static sceUserServiceLogin_t                       p_sceUserServiceLogin = NULL;
 static sceUserServiceLogout_t                      p_sceUserServiceLogout = NULL;
 static sceUserServiceSetLightBarBaseBrightness_t   p_sceUserServiceSetLightBarBaseBrightness = NULL;
+static sceUserServiceSetVibrationEnabled_t         p_sceUserServiceSetVibrationEnabled = NULL;
+static int s_last_base_br[SCE_USER_SERVICE_MAX_LOGIN_USERS] = { -1, -1, -1, -1 };
+static int s_last_vib_en[SCE_USER_SERVICE_MAX_LOGIN_USERS] = { -1, -1, -1, -1 };
 
 static int s_assigned_slot = 1;
 static char s_assigned_username[64] = "Player 1";
@@ -325,6 +329,7 @@ static void init_user_service(void) {
             daemon_sys_dlsym(g_hUserService, "sceUserServiceLogin", (void**)&p_sceUserServiceLogin);
             daemon_sys_dlsym(g_hUserService, "sceUserServiceLogout", (void**)&p_sceUserServiceLogout);
             daemon_sys_dlsym(g_hUserService, "sceUserServiceSetLightBarBaseBrightness", (void**)&p_sceUserServiceSetLightBarBaseBrightness);
+            daemon_sys_dlsym(g_hUserService, "sceUserServiceSetVibrationEnabled", (void**)&p_sceUserServiceSetVibrationEnabled);
             if (p_sceUserServiceInitialize) {
                 int r = p_sceUserServiceInitialize(NULL);
                 daemon_log(LOG_LEVEL_INFO, "sceUserServiceInitialize() = 0x%08X", r);
@@ -509,7 +514,18 @@ void vpad_poweroff_physical_ds4(void) {
     }
 
     if (any_disconnected) {
-        daemon_sys_usleep(80000);
+        const char *req_paths[2] = {
+            "/data/anycontroller/ds4_disconnect.req",
+            "/user/data/anycontroller/ds4_disconnect.req"
+        };
+        for (int p = 0; p < 2; p++) {
+            int rfd = daemon_sys_open(req_paths[p], 0x0601 /* O_WRONLY|O_CREAT|O_TRUNC */, 0666);
+            if (rfd >= 0) {
+                daemon_sys_write(rfd, "1\n", 2);
+                daemon_sys_close(rfd);
+            }
+        }
+        daemon_sys_usleep(120000);
     }
 }
 
@@ -546,13 +562,7 @@ static int vpad_bind_user_slot(int slot_idx, ConfigMode mode, int *out_slot, cha
     SceUserServiceUserId target_user = SCE_USER_SERVICE_USER_ID_INVALID;
     int player_slot = slot_idx + 1;
 
-    if (mode == CONFIG_MODE_AUTO && slot_idx == 0) {
-        // CONFIG_MODE_AUTO on Slot 0 (Player 1):
-        // Preserve existing working Player 1 connection untouched!
-        target_user = SCE_USER_SERVICE_USER_ID_INVALID;
-        player_slot = 1;
-        g_slots[0].bound_to_user = (num_logged_in >= 1);
-    } else if (mode == CONFIG_MODE_SECONDARY || slot_idx >= 1) {
+    if (mode == CONFIG_MODE_SECONDARY || slot_idx >= 1) {
         int user_idx = (slot_idx >= 1) ? slot_idx : 1;
         player_slot = user_idx + 1;
         if (player_slot > 4) player_slot = 4;
@@ -775,9 +785,9 @@ void vpad_reactivate_slot(int slot) {
     }
     g_slots[slot].user_interacted = false;
     g_slots[slot].slot_open_login_count = (s_last_login_count >= 0) ? s_last_login_count : 0;
-    vpad_schedule_ps_pulse_slot(slot, 150000ULL, 160000ULL);
-    if (g_daemon_config.mode != CONFIG_MODE_AUTO) {
-        vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
+    vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
+    if (!g_slots[slot].bound_to_user) {
+        vpad_schedule_ps_pulse_slot(slot, 150000ULL, 160000ULL);
     }
 }
 
@@ -869,7 +879,15 @@ void vpad_apply_ds4_lightbar(void) {
 
     for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) {
         SceUserServiceUserId uid = list.userId[i];
-        if (uid == SCE_USER_SERVICE_USER_ID_INVALID || uid == 0 || (uint32_t)uid == 0xFFFFFFFFU) {
+        bool slot_claimed_by_vpad = false;
+        for (int s = 0; s < VPAD_MAX_SLOTS; s++) {
+            if (g_slots[s].active && g_slots[s].assigned_slot == (i + 1)) {
+                slot_claimed_by_vpad = true;
+                break;
+            }
+        }
+
+        if (uid == SCE_USER_SERVICE_USER_ID_INVALID || uid == 0 || (uint32_t)uid == 0xFFFFFFFFU || slot_claimed_by_vpad) {
             if (s_ds4_handles[i] >= 0) {
                 if (p_scePadClose && !is_our_virtual_handle(s_ds4_handles[i])) {
                     p_scePadClose(s_ds4_handles[i]);
@@ -877,11 +895,21 @@ void vpad_apply_ds4_lightbar(void) {
                 s_ds4_handles[i] = -1;
                 s_ds4_uids[i] = SCE_USER_SERVICE_USER_ID_INVALID;
             }
+            if (uid == SCE_USER_SERVICE_USER_ID_INVALID || uid == 0 || (uint32_t)uid == 0xFFFFFFFFU) {
+                s_last_base_br[i] = -1;
+                s_last_vib_en[i] = -1;
+            }
             continue;
         }
 
-        // Keep persistent daemon handle per logged-in user without calling scePadReadState in background
-        // (calling scePadClose on focus loss causes Sony libScePad to reset the lightbar back to Blue).
+        const DaemonConfig *ds4_cfg = &s_ds4_slot_cfgs[i];
+        int vib_en = (ds4_cfg->enable_rumble && ds4_cfg->ds4_rumble_boost != 3) ? 1 : 0;
+        if (p_sceUserServiceSetVibrationEnabled && s_last_vib_en[i] != vib_en) {
+            s_last_vib_en[i] = vib_en;
+            p_sceUserServiceSetVibrationEnabled(uid, vib_en ? true : false);
+        }
+
+        // Keep persistent daemon handle per logged-in user without calling scePadClose on transient errors
         int32_t pad_handle = -1;
         if (s_ds4_handles[i] >= 0 && s_ds4_uids[i] == uid && !is_our_virtual_handle(s_ds4_handles[i])) {
             pad_handle = s_ds4_handles[i];
@@ -911,22 +939,20 @@ void vpad_apply_ds4_lightbar(void) {
         }
 
         if (pad_handle >= 0 && !is_our_virtual_handle(pad_handle)) {
-            const DaemonConfig *ds4_cfg = &s_ds4_slot_cfgs[i];
             int br = ds4_cfg->ds4_brightness;
             if (br < 0 || br > 2) br = 0;
 
             int hw_base_br = (ds4_cfg->ds4_lightbar_mode == 3) ? 2 : br;
-            if (p_sceUserServiceSetLightBarBaseBrightness) {
-                p_sceUserServiceSetLightBarBaseBrightness(uid, hw_base_br);
-            }
-            if (p_scePadSetLightBarBaseBrightness) {
-                p_scePadSetLightBarBaseBrightness(pad_handle, hw_base_br);
+            if (s_last_base_br[i] != hw_base_br) {
+                s_last_base_br[i] = hw_base_br;
+                if (p_scePadSetLightBarBaseBrightness) {
+                    p_scePadSetLightBarBaseBrightness(pad_handle, hw_base_br);
+                }
             }
 
-            int apply_rc = 0;
             if (ds4_cfg->ds4_lightbar_mode == 0 && br == 0) {
                 if (p_scePadResetLightBar) {
-                    apply_rc = p_scePadResetLightBar(pad_handle);
+                    p_scePadResetLightBar(pad_handle);
                 }
             } else if (p_scePadSetLightBar) {
                 OrbisPadColor col = { 0, 0, 0, 0 };
@@ -935,10 +961,9 @@ void vpad_apply_ds4_lightbar(void) {
 
                 if (ds4_cfg->ds4_lightbar_mode == 3) {
                     col.r = 0; col.g = 0; col.b = 0; col.a = 0;
-                    apply_rc = p_scePadSetLightBar(pad_handle, &col);
-                    if (apply_rc != 0) {
+                    if (p_scePadSetLightBar(pad_handle, &col) != 0) {
                         col.r = 1; col.g = 0; col.b = 0; col.a = 0;
-                        apply_rc = p_scePadSetLightBar(pad_handle, &col);
+                        p_scePadSetLightBar(pad_handle, &col);
                     }
                 } else {
                     if (ds4_cfg->ds4_lightbar_mode == 2) {
@@ -962,29 +987,23 @@ void vpad_apply_ds4_lightbar(void) {
 
                     if (br == 1) {
                         uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
-                        col.r = (uint8_t)((col.r * 25) / 100);
-                        col.g = (uint8_t)((col.g * 25) / 100);
-                        col.b = (uint8_t)((col.b * 25) / 100);
+                        col.r = (uint8_t)((col.r * 50) / 100);
+                        col.g = (uint8_t)((col.g * 50) / 100);
+                        col.b = (uint8_t)((col.b * 50) / 100);
                         if (orig_r > 0 && col.r == 0) col.r = 1;
                         if (orig_g > 0 && col.g == 0) col.g = 1;
                         if (orig_b > 0 && col.b == 0) col.b = 1;
                     } else if (br == 2) {
                         uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
-                        col.r = (uint8_t)((col.r * 5) / 100);
-                        col.g = (uint8_t)((col.g * 5) / 100);
-                        col.b = (uint8_t)((col.b * 5) / 100);
+                        col.r = (uint8_t)((col.r * 15) / 100);
+                        col.g = (uint8_t)((col.g * 15) / 100);
+                        col.b = (uint8_t)((col.b * 15) / 100);
                         if (orig_r > 0 && col.r == 0) col.r = 2;
                         if (orig_g > 0 && col.g == 0) col.g = 2;
                         if (orig_b > 0 && col.b == 0) col.b = 2;
                     }
-                    apply_rc = p_scePadSetLightBar(pad_handle, &col);
+                    p_scePadSetLightBar(pad_handle, &col);
                 }
-            }
-
-            if (apply_rc < 0 && s_ds4_handles[i] == pad_handle) {
-                if (p_scePadClose) p_scePadClose(s_ds4_handles[i]);
-                s_ds4_handles[i] = -1;
-                s_ds4_uids[i] = SCE_USER_SERVICE_USER_ID_INVALID;
             }
         }
     }
@@ -1042,25 +1061,7 @@ bool vpad_check_user_rebind(ConfigMode mode) {
                 if (p_scePadSetConnection) {
                     p_scePadSetConnection(g_slots[i].handle, 1);
                 }
-                if (mode != CONFIG_MODE_AUTO || i >= 1) {
-                    vpad_bind_user_slot(i, mode, NULL, NULL, 0);
-                } else {
-                    g_slots[0].bound_to_user = (num_logged_in >= 1);
-                    if (i < num_logged_in && p_sceUserServiceGetUserName) {
-                        g_slots[i].assigned_username[0] = '\0';
-                        p_sceUserServiceGetUserName(valid_users[i], g_slots[i].assigned_username, sizeof(g_slots[i].assigned_username));
-                        if (g_slots[i].assigned_username[0] == '\0') {
-                            snprintf(g_slots[i].assigned_username, sizeof(g_slots[i].assigned_username), "Jugador %d", i + 1);
-                        }
-                        if (i == 0) {
-                            strncpy(s_assigned_username, g_slots[0].assigned_username, sizeof(s_assigned_username) - 1);
-                            s_assigned_username[sizeof(s_assigned_username) - 1] = '\0';
-                        }
-                    }
-                    if (num_logged_in == 0) {
-                        vpad_schedule_ps_pulse_slot(i, 150000ULL, 160000ULL);
-                    }
-                }
+                vpad_bind_user_slot(i, mode, NULL, NULL, 0);
             }
         }
         return true;
@@ -1196,15 +1197,13 @@ int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
         return -1;
     }
 
-    // Only power off physical DS4 in explicit MERGE mode for USB controllers.
-    // In AUTO mode (and for all Bluetooth DualSense connections), the native PS4
-    // "Who is using this controller?" screen handles profile selection and automatically
-    // replaces Player 1's controller or assigns Player 2/3/4 without freezing SceShellCore!
+    // Replace Player 1 physical DS4 automatically when the first controller connects
+    // (AUTO mode guards chk_logged >= 2 internally inside vpad_poweroff_physical_ds4).
     bool any_prior_active = false;
     for (int i = 0; i < VPAD_MAX_SLOTS; i++) {
         if (g_slots[i].active) { any_prior_active = true; break; }
     }
-    if (!any_prior_active && g_daemon_config.mode == CONFIG_MODE_MERGE && source == VPAD_SOURCE_USB) {
+    if (!any_prior_active && (g_daemon_config.mode == CONFIG_MODE_MERGE || g_daemon_config.mode == CONFIG_MODE_AUTO)) {
         vpad_poweroff_physical_ds4();
     }
 
@@ -1277,20 +1276,15 @@ int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
         daemon_log(LOG_LEVEL_INFO, "Virtual DS4 Slot %d initial neutral packet -> 0x%08X", slot, ri);
     }
 
-    if (g_daemon_config.mode != CONFIG_MODE_AUTO || slot >= 1) {
-        vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
-    } else {
-        g_slots[0].bound_to_user = (cur_logins >= 1);
-    }
+    vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
 
-    // For Slot 0, keep initial 160ms PS pulse (matches rock-solid Player 1 behavior).
-    // For Slot >= 1, ONLY pulse if sceMbusBindDeviceWithUserId did NOT already bind to a separate profile!
-    if (slot == 0) {
+    // Only pulse PS button if sceMbusBindDeviceWithUserId did not already bind to a logged-in user!
+    if (!g_slots[slot].bound_to_user) {
         vpad_schedule_ps_pulse_slot(slot, 150000ULL, 160000ULL);
-    } else if (!g_slots[slot].bound_to_user) {
-        vpad_schedule_ps_pulse_slot(slot, 150000ULL, 160000ULL);
-        g_slots[slot].ps_followup_pending = true;
-        g_slots[slot].ps_followup_at_us = daemon_sys_time_us() + 1800000ULL;
+        if (slot >= 1) {
+            g_slots[slot].ps_followup_pending = true;
+            g_slots[slot].ps_followup_at_us = daemon_sys_time_us() + 1800000ULL;
+        }
     }
 
     if (out_slot) *out_slot = slot;
@@ -1477,8 +1471,21 @@ int vpad_send_data_slot(int slot, const OrbisPadData *data) {
         send_data.acell.y = -1.0f;
     }
 
+    // Apply DS4 Touchpad & Gyro deadband configuration on virtual DS4 slot
+    if (!s_ds4_cfgs_loaded) vpad_reload_ds4_configs();
+    const DaemonConfig *slot_ds4_cfg = &s_ds4_slot_cfgs[slot];
+    if (slot_ds4_cfg->ds4_touchpad_mode == 1) {
+        send_data.touch.fingers = 0;
+        memset(send_data.touch.touch, 0, sizeof(send_data.touch.touch));
+    }
+    if (slot_ds4_cfg->ds4_gyro_deadband > 0) {
+        float db = (slot_ds4_cfg->ds4_gyro_deadband == 1) ? 0.06f : 0.14f;
+        if (send_data.acell.x > -db && send_data.acell.x < db) send_data.acell.x = 0.0f;
+        if (send_data.acell.z > -db && send_data.acell.z < db) send_data.acell.z = 0.0f;
+    }
+
     // Capacitive Touchpad Emulation for Touchpad Click:
-    if ((send_data.buttons & DS4_BUTTON_TOUCHPAD) && send_data.touch.fingers == 0) {
+    if (slot_ds4_cfg->ds4_touchpad_mode != 1 && (send_data.buttons & DS4_BUTTON_TOUCHPAD) && send_data.touch.fingers == 0) {
         send_data.touch.fingers = 1;
         send_data.touch.touch[0].finger = 0;
         send_data.touch.touch[0].x = 960;

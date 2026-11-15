@@ -772,6 +772,16 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
                             bR1 ? Color{ 0, 190, 255 } : Color{ 38, 44, 58 },
                             bR1 ? Color{ 0, 120, 220 } : Color{ 20, 24, 34 }, 255);
 
+        // Crisp Dark Outer Silhouette + Rim Specular Highlights for DualSense Grips & Wings
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx - 178.0f * S, cy - 26.0f * S,
+                            cx - 214.0f * S, cy + 128.0f * S,
+                            60.5f * S, 38.5f * S, Color{ 64, 78, 102 }, Color{ 28, 34, 48 }, 235);
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx + 178.0f * S, cy - 26.0f * S,
+                            cx + 214.0f * S, cy + 128.0f * S,
+                            60.5f * S, 38.5f * S, Color{ 64, 78, 102 }, Color{ 28, 34, 48 }, 235);
+
         // DualSense Lower Black Bridge Trim behind white outer wings
         Vec2 bridgePoly[8] = {
             { cx - 148.0f * S, cy - 72.0f * S },
@@ -794,18 +804,25 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
                             cx + 178.0f * S, cy - 26.0f * S,
                             cx + 214.0f * S, cy + 128.0f * S,
                             58.0f * S, 36.0f * S, shellMid, shellBot, 255);
+        // Subtle inner highlight along grip outer curvature
+        draw_line_aa(fb, fbW, fbH, cl, cx - 226.0f * S, cy + 8.0f * S, cx - 246.0f * S, cy + 120.0f * S,
+                     2.0f * S, Color{ 255, 255, 255 }, 95);
+        draw_line_aa(fb, fbW, fbH, cl, cx + 226.0f * S, cy + 8.0f * S, cx + 246.0f * S, cy + 120.0f * S,
+                     2.0f * S, Color{ 255, 255, 255 }, 95);
 
         // Inner Black Grip Seam Accent along handles (classic DualSense two-tone curve)
         draw_capsule_shaded(fb, fbW, fbH, cl,
                             cx - 145.0f * S, cy + 12.0f * S,
                             cx - 178.0f * S, cy + 114.0f * S,
-                            18.0f * S, 11.0f * S, Color{ 24, 29, 40 }, Color{ 16, 20, 28 }, 240);
+                            18.0f * S, 11.0f * S, Color{ 24, 29, 40 }, Color{ 16, 20, 28 }, 245);
         draw_capsule_shaded(fb, fbW, fbH, cl,
                             cx + 145.0f * S, cy + 12.0f * S,
                             cx + 178.0f * S, cy + 114.0f * S,
-                            18.0f * S, 11.0f * S, Color{ 24, 29, 40 }, Color{ 16, 20, 28 }, 240);
+                            18.0f * S, 11.0f * S, Color{ 24, 29, 40 }, Color{ 16, 20, 28 }, 245);
 
-        // Left & Right White Wing Shoulders (DPad Wing + Face Button Wing)
+        // Left & Right White Wing Shoulders (DPad Wing + Face Button Wing) with crisp bevel ring
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx - 156.0f * S, cy - 42.0f * S, 88.5f * S, 70.5f * S, Color{ 95, 112, 138 }, Color{ 42, 50, 68 }, 220);
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx + 156.0f * S, cy - 42.0f * S, 88.5f * S, 70.5f * S, Color{ 95, 112, 138 }, Color{ 42, 50, 68 }, 220);
         fill_ellipse_shaded(fb, fbW, fbH, cl, cx - 156.0f * S, cy - 42.0f * S, 86.0f * S, 68.0f * S, shellTop, shellMid, 255);
         fill_ellipse_shaded(fb, fbW, fbH, cl, cx + 156.0f * S, cy - 42.0f * S, 86.0f * S, 68.0f * S, shellTop, shellMid, 255);
 
@@ -819,6 +836,8 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             { cx - 148.0f * S, cy + 12.0f * S }
         };
         fill_poly_shaded(fb, fbW, fbH, cl, upperShell, 6, shellTop, shellMid, 255);
+        draw_line_aa(fb, fbW, fbH, cl, cx - 152.0f * S, cy - 101.0f * S, cx + 152.0f * S, cy - 101.0f * S,
+                     2.0f * S, Color{ 255, 255, 255 }, 170);
 
         // Matte Black Center U-Plate (frames Touchpad bottom & Analog Sticks like genuine DualSense)
         Vec2 centerPlate[8] = {
@@ -831,12 +850,16 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             { cx - 118.0f * S, cy + 4.0f * S }
         };
         fill_poly_shaded(fb, fbW, fbH, cl, centerPlate, 6, Color{ 26, 31, 42 }, Color{ 16, 19, 27 }, 255);
+        // Glossy metallic U-plate edge trim
+        draw_line_aa(fb, fbW, fbH, cl, cx - 118.0f * S, cy + 4.0f * S, cx - 128.0f * S, cy + 56.0f * S, 1.5f * S, Color{ 70, 82, 104 }, 210);
+        draw_line_aa(fb, fbW, fbH, cl, cx + 118.0f * S, cy + 4.0f * S, cx + 128.0f * S, cy + 56.0f * S, 1.5f * S, Color{ 70, 82, 104 }, 210);
+        draw_line_aa(fb, fbW, fbH, cl, cx - 72.0f * S, cy + 80.0f * S, cx + 72.0f * S, cy + 80.0f * S, 1.5f * S, Color{ 56, 68, 88 }, 210);
 
         // Analog Stick Circular Wells embedded in U-Plate
         fill_circle_shaded(fb, fbW, fbH, cl, cx - 74.0f * S, cy + 36.0f * S, 42.0f * S,
-                           Color{ 22, 26, 36 }, Color{ 13, 16, 24 }, 255);
+                           Color{ 24, 29, 40 }, Color{ 12, 15, 22 }, 255);
         fill_circle_shaded(fb, fbW, fbH, cl, cx + 74.0f * S, cy + 36.0f * S, 42.0f * S,
-                           Color{ 22, 26, 36 }, Color{ 13, 16, 24 }, 255);
+                           Color{ 24, 29, 40 }, Color{ 12, 15, 22 }, 255);
 
         // Touchpad Surround (Matte Grey/Black Edge + Glowing Dual V Lightbar Slits)
         float tpTopW = 196.0f * S;
@@ -849,8 +872,8 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             float frac = (float)sIdx / 4.0f;
             float gy = tpTopY + (tpBotY - tpTopY) * frac;
             float gxOff = (tpTopW * 0.5f) * (1.0f - frac) + (tpBotW * 0.5f) * frac + 2.0f * S;
-            draw_glow_disc(fb, fbW, fbH, cl, cx - gxOff, gy, 24.0f * S, lightCol, 85);
-            draw_glow_disc(fb, fbW, fbH, cl, cx + gxOff, gy, 24.0f * S, lightCol, 85);
+            draw_glow_disc(fb, fbW, fbH, cl, cx - gxOff, gy, 28.0f * S, lightCol, 105);
+            draw_glow_disc(fb, fbW, fbH, cl, cx + gxOff, gy, 28.0f * S, lightCol, 105);
         }
 
         // Actual Pearl-White Touchpad Surface
@@ -860,17 +883,36 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             { cx + tpBotW * 0.5f, tpBotY },
             { cx - tpBotW * 0.5f, tpBotY }
         };
-        Color tpTop = bTpClick ? Color{ 120, 235, 255 } : Color{ 244, 246, 250 };
-        Color tpBot = bTpClick ? Color{ 40, 170, 235 }  : Color{ 218, 224, 234 };
+        Color tpTop = bTpClick ? Color{ 120, 235, 255 } : Color{ 246, 248, 252 };
+        Color tpBot = bTpClick ? Color{ 40, 170, 235 }  : Color{ 214, 221, 233 };
         fill_poly_shaded(fb, fbW, fbH, cl, tpPoly, 4, tpTop, tpBot, 255);
 
-        // Dual Slanted RGB Lightbars framing the DualSense Touchpad
+        // Subtle Micro-Dot Texture Grid across Pearl Touchpad
+        {
+            Color dotCol = bTpClick ? Color{ 225, 252, 255 } : Color{ 176, 186, 204 };
+            for (int row = 0; row < 5; row++) {
+                float fy = 0.22f + row * 0.14f;
+                float dy = tpTopY + (tpBotY - tpTopY) * fy;
+                float halfRowW = ((tpTopW * (1.0f - fy) + tpBotW * fy) * 0.40f);
+                for (int col = -5; col <= 5; col++) {
+                    float dx = cx + (float)col * (halfRowW / 5.4f);
+                    fill_circle_aa(fb, fbW, fbH, cl, dx, dy, 1.15f * S, dotCol, 155);
+                }
+            }
+        }
+
+        // Dual Slanted RGB Lightbars framing the DualSense Touchpad (with crisp bright inner core)
+        Color lightCore = lerp_color(lightCol, Color{ 255, 255, 255 }, 0.45f);
         draw_line_aa(fb, fbW, fbH, cl, cx - tpTopW * 0.5f - 2.0f * S, tpTopY + 3.0f * S,
-                     cx - tpBotW * 0.5f - 2.0f * S, tpBotY - 1.0f * S, 5.2f * S, lightCol, 255);
+                     cx - tpBotW * 0.5f - 2.0f * S, tpBotY - 1.0f * S, 6.0f * S, lightCol, 255);
+        draw_line_aa(fb, fbW, fbH, cl, cx - tpTopW * 0.5f - 2.0f * S, tpTopY + 3.0f * S,
+                     cx - tpBotW * 0.5f - 2.0f * S, tpBotY - 1.0f * S, 2.2f * S, lightCore, 230);
         draw_line_aa(fb, fbW, fbH, cl, cx + tpTopW * 0.5f + 2.0f * S, tpTopY + 3.0f * S,
-                     cx + tpBotW * 0.5f + 2.0f * S, tpBotY - 1.0f * S, 5.2f * S, lightCol, 255);
+                     cx + tpBotW * 0.5f + 2.0f * S, tpBotY - 1.0f * S, 6.0f * S, lightCol, 255);
+        draw_line_aa(fb, fbW, fbH, cl, cx + tpTopW * 0.5f + 2.0f * S, tpTopY + 3.0f * S,
+                     cx + tpBotW * 0.5f + 2.0f * S, tpBotY - 1.0f * S, 2.2f * S, lightCore, 230);
         // Bottom Touchpad hairline shadow
-        draw_line_aa(fb, fbW, fbH, cl, cx - tpBotW * 0.5f, tpBotY, cx + tpBotW * 0.5f, tpBotY, 2.0f, Color{ 95, 110, 130 }, 200);
+        draw_line_aa(fb, fbW, fbH, cl, cx - tpBotW * 0.5f, tpBotY, cx + tpBotW * 0.5f, tpBotY, 2.0f, Color{ 95, 110, 130 }, 220);
 
         // 5 Crisp White Player Indicator LEDs right below Touchpad center
         {
@@ -920,27 +962,35 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             if (bOptions) draw_glow_disc(fb, fbW, fbH, cl, opX, (btnY0 + btnY1) * 0.5f, 18.0f * S, Color{ 0, 240, 255 }, 170);
         }
 
-        // PS Button + Horizontal Mute Pill in Center Black Plate
+        // Speaker Slit + PS Button + Horizontal Mute Pill in Center Black Plate
         {
+            for (int col = -3; col <= 3; col++) {
+                fill_circle_aa(fb, fbW, fbH, cl, cx + col * 4.5f * S, cy + 12.0f * S, 1.25f * S, Color{ 6, 8, 13 }, 230);
+            }
+
             float psY = cy + 32.0f * S;
             if (bPs) draw_glow_disc(fb, fbW, fbH, cl, cx, psY, 24.0f * S, Color{ 0, 220, 255 }, 210);
-            fill_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, bPs ? Color{ 0, 210, 255 } : Color{ 44, 52, 68 }, 255);
-            stroke_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, 1.3f, bPs ? Color{ 255, 255, 255 } : Color{ 120, 134, 160 }, 255);
-            draw_tiny_text(fb, fbW, fbH, cl, (int)cx, (int)psY, (S > 0.9f ? 1 : 1), "PS",
-                           bPs ? Color{ 255, 255, 255 } : Color{ 210, 222, 240 }, 255);
+            fill_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.5f * S, bPs ? Color{ 0, 210, 255 } : Color{ 44, 52, 68 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.5f * S, 1.4f, bPs ? Color{ 255, 255, 255 } : Color{ 130, 146, 174 }, 255);
+            draw_tiny_text(fb, fbW, fbH, cl, (int)cx, (int)psY, 1, "PS",
+                           bPs ? Color{ 255, 255, 255 } : Color{ 215, 226, 245 }, 255);
 
-            // Mute Pill right under PS button
+            // Mute Pill right under PS button (lit amber/cyan depending on ds_mute_action)
             float muteY = cy + 56.0f * S;
+            bool muteLit = (cfg.ds_mute_action != 0);
+            Color muteTop = muteLit ? Color{ 255, 175, 45 } : Color{ 70, 80, 98 };
+            Color muteBot = muteLit ? Color{ 210, 120, 12 } : Color{ 44, 52, 66 };
+            if (muteLit) draw_glow_disc(fb, fbW, fbH, cl, cx, muteY + 3.0f * S, 16.0f * S, Color{ 245, 165, 35 }, 95);
             draw_round_rect_aa(fb, fbW, fbH, cl, cx - 12.0f * S, muteY, 24.0f * S, 6.0f * S, 3.0f * S,
-                               Color{ 245, 165, 35 }, Color{ 210, 125, 15 }, 230);
+                               muteTop, muteBot, 245);
         }
 
-        // Left D-Pad Recessed Well + 4 Crisp Directional Keys
+        // Left D-Pad Recessed Well + 4 Crisp Directional Keys with Chevrons
         {
             float dcx = cx - 156.0f * S;
             float dcy = cy - 42.0f * S;
-            fill_circle_shaded(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, Color{ 212, 220, 232 }, Color{ 186, 196, 212 }, 255);
-            stroke_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, 1.3f, Color{ 150, 162, 182 }, 220);
+            fill_circle_shaded(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, Color{ 210, 218, 232 }, Color{ 182, 192, 210 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, 1.4f, Color{ 142, 155, 178 }, 230);
 
             struct DDir { float ox, oy; bool on; int pIdx; };
             DDir dirs[4] = {
@@ -949,9 +999,8 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
                 { -21.0f * S, 0.0f, bLeft, 6 },
                 {  21.0f * S, 0.0f, bRight, 7 }
             };
-            Color dpBaseTop = { 244, 247, 252 };
+            Color dpBaseTop = { 246, 249, 253 };
             Color dpBaseBot = { 196, 206, 222 };
-            // Cross arms
             draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy - 31.0f * S, 21.0f * S, 22.0f * S, 5.0f * S,
                                bUp ? Color{ 0, 225, 255 } : dpBaseTop, bUp ? Color{ 0, 155, 235 } : dpBaseBot, 255);
             draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy + 9.0f * S, 21.0f * S, 22.0f * S, 5.0f * S,
@@ -960,7 +1009,23 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
                                bLeft ? Color{ 0, 225, 255 } : dpBaseTop, bLeft ? Color{ 0, 155, 235 } : dpBaseBot, 255);
             draw_round_rect_aa(fb, fbW, fbH, cl, dcx + 9.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 5.0f * S,
                                bRight ? Color{ 0, 225, 255 } : dpBaseTop, bRight ? Color{ 0, 155, 235 } : dpBaseBot, 255);
-            fill_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 10.0f * S, Color{ 216, 224, 236 }, 255);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy - 31.0f * S, 21.0f * S, 22.0f * S, 5.0f * S, 1.1f, bUp ? Color{ 210, 250, 255 } : Color{ 152, 165, 186 }, 220);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy + 9.0f * S, 21.0f * S, 22.0f * S, 5.0f * S, 1.1f, bDown ? Color{ 210, 250, 255 } : Color{ 152, 165, 186 }, 220);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx - 31.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 5.0f * S, 1.1f, bLeft ? Color{ 210, 250, 255 } : Color{ 152, 165, 186 }, 220);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx + 9.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 5.0f * S, 1.1f, bRight ? Color{ 210, 250, 255 } : Color{ 152, 165, 186 }, 220);
+            fill_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 9.5f * S, Color{ 212, 220, 234 }, 255);
+
+            // Inner directional chevron ticks
+            Color chOff = { 130, 144, 166 };
+            Color chOn  = { 255, 255, 255 };
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 4.0f * S, dcy - 19.0f * S, dcx, dcy - 24.5f * S, 1.8f, bUp ? chOn : chOff, 230);
+            draw_line_aa(fb, fbW, fbH, cl, dcx, dcy - 24.5f * S, dcx + 4.0f * S, dcy - 19.0f * S, 1.8f, bUp ? chOn : chOff, 230);
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 4.0f * S, dcy + 19.0f * S, dcx, dcy + 24.5f * S, 1.8f, bDown ? chOn : chOff, 230);
+            draw_line_aa(fb, fbW, fbH, cl, dcx, dcy + 24.5f * S, dcx + 4.0f * S, dcy + 19.0f * S, 1.8f, bDown ? chOn : chOff, 230);
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 19.0f * S, dcy - 4.0f * S, dcx - 24.5f * S, dcy, 1.8f, bLeft ? chOn : chOff, 230);
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 24.5f * S, dcy, dcx - 19.0f * S, dcy + 4.0f * S, 1.8f, bLeft ? chOn : chOff, 230);
+            draw_line_aa(fb, fbW, fbH, cl, dcx + 19.0f * S, dcy - 4.0f * S, dcx + 24.5f * S, dcy, 1.8f, bRight ? chOn : chOff, 230);
+            draw_line_aa(fb, fbW, fbH, cl, dcx + 24.5f * S, dcy, dcx + 19.0f * S, dcy + 4.0f * S, 1.8f, bRight ? chOn : chOff, 230);
 
             for (int di = 0; di < 4; di++) {
                 float px = dcx + dirs[di].ox, py = dcy + dirs[di].oy;
@@ -979,6 +1044,9 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             float off = 29.0f * S;
             float btnR = 14.5f * S;
 
+            fill_circle_shaded(fb, fbW, fbH, cl, fcx, fcy, 46.0f * S, Color{ 218, 226, 238 }, Color{ 192, 202, 218 }, 190);
+            stroke_circle_aa(fb, fbW, fbH, cl, fcx, fcy, 46.0f * S, 1.2f, Color{ 160, 172, 192 }, 190);
+
             struct FaceSpec { float x, y; bool on; int pIdx; Color symCol; int symType; };
             FaceSpec faces[4] = {
                 { fcx,       fcy - off, bTriangle, 3, Color{ 45, 225, 160 }, 0 }, // Triangle
@@ -989,17 +1057,19 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             for (int fi = 0; fi < 4; fi++) {
                 FaceSpec& f = faces[fi];
                 if (f.on) {
-                    draw_glow_disc(fb, fbW, fbH, cl, f.x, f.y, btnR * 2.1f, f.symCol, 220);
+                    draw_glow_disc(fb, fbW, fbH, cl, f.x, f.y, btnR * 2.2f, f.symCol, 225);
                 }
                 if (m_pulse[f.pIdx] > 0.02f) {
                     stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR + (1.0f - m_pulse[f.pIdx]) * 18.0f * S,
                                      2.4f, f.symCol, (uint8_t)(230 * m_pulse[f.pIdx]));
                 }
-                Color capTop = f.on ? lerp_color(f.symCol, Color{ 255, 255, 255 }, 0.25f) : Color{ 242, 245, 250 };
+                Color capTop = f.on ? lerp_color(f.symCol, Color{ 255, 255, 255 }, 0.28f) : Color{ 244, 247, 252 };
                 Color capBot = f.on ? f.symCol : Color{ 204, 212, 226 };
                 fill_circle_shaded(fb, fbW, fbH, cl, f.x, f.y, btnR, capTop, capBot, 255);
-                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR, 1.3f,
-                                 f.on ? Color{ 255, 255, 255 } : Color{ 152, 165, 186 }, 255);
+                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR, 1.4f,
+                                 f.on ? Color{ 255, 255, 255 } : Color{ 146, 159, 182 }, 255);
+                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR - 2.2f * S, 1.0f,
+                                 Color{ 255, 255, 255 }, f.on ? 155 : 95);
 
                 Color glyphCol = f.on ? Color{ 255, 255, 255 } : f.symCol;
                 float gr = btnR * 0.48f;
@@ -1035,7 +1105,15 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
                             bR1 ? Color{ 0, 195, 255 } : Color{ 56, 64, 82 },
                             bR1 ? Color{ 0, 125, 215 } : Color{ 26, 31, 42 }, 255);
 
-        // DualShock 4 Unibody Tapered Cylindrical Side Grips
+        // DualShock 4 Unibody Tapered Cylindrical Side Grips with Rim Definition
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx - 170.0f * S, cy - 28.0f * S,
+                            cx - 208.0f * S, cy + 124.0f * S,
+                            58.5f * S, 37.5f * S, Color{ 74, 86, 110 }, Color{ 28, 34, 48 }, 235);
+        draw_capsule_shaded(fb, fbW, fbH, cl,
+                            cx + 170.0f * S, cy - 28.0f * S,
+                            cx + 208.0f * S, cy + 124.0f * S,
+                            58.5f * S, 37.5f * S, Color{ 74, 86, 110 }, Color{ 28, 34, 48 }, 235);
         draw_capsule_shaded(fb, fbW, fbH, cl,
                             cx - 170.0f * S, cy - 28.0f * S,
                             cx - 208.0f * S, cy + 124.0f * S,
@@ -1044,8 +1122,15 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
                             cx + 170.0f * S, cy - 28.0f * S,
                             cx + 208.0f * S, cy + 124.0f * S,
                             56.0f * S, 35.0f * S, bodyMid, bodyBot, 255);
+        // Sculpted Matte-Gloss Grip Highlight Arc
+        draw_line_aa(fb, fbW, fbH, cl, cx - 220.0f * S, cy + 6.0f * S, cx - 238.0f * S, cy + 116.0f * S,
+                     1.6f * S, Color{ 100, 116, 146 }, 120);
+        draw_line_aa(fb, fbW, fbH, cl, cx + 220.0f * S, cy + 6.0f * S, cx + 238.0f * S, cy + 116.0f * S,
+                     1.6f * S, Color{ 100, 116, 146 }, 120);
 
-        // Circular Left & Right Button Wells
+        // Circular Left & Right Button Wells with Crisp Satin Bezels
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx - 152.0f * S, cy - 42.0f * S, 84.5f * S, 68.5f * S, Color{ 76, 88, 112 }, Color{ 32, 38, 52 }, 230);
+        fill_ellipse_shaded(fb, fbW, fbH, cl, cx + 152.0f * S, cy - 42.0f * S, 84.5f * S, 68.5f * S, Color{ 76, 88, 112 }, Color{ 32, 38, 52 }, 230);
         fill_ellipse_shaded(fb, fbW, fbH, cl, cx - 152.0f * S, cy - 42.0f * S, 82.0f * S, 66.0f * S, bodyTop, bodyMid, 255);
         fill_ellipse_shaded(fb, fbW, fbH, cl, cx + 152.0f * S, cy - 42.0f * S, 82.0f * S, 66.0f * S, bodyTop, bodyMid, 255);
 
@@ -1059,31 +1144,42 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             { cx - 136.0f * S, cy + 62.0f * S }
         };
         fill_poly_shaded(fb, fbW, fbH, cl, ds4Center, 6, bodyTop, bodyBot, 255);
+        draw_line_aa(fb, fbW, fbH, cl, cx - 76.0f * S, cy + 78.0f * S, cx + 76.0f * S, cy + 78.0f * S, 1.5f * S, Color{ 68, 80, 104 }, 210);
 
         // Glossy Dark Inner Stick Rings (DualShock 4 raised thumbstick bezels)
-        fill_circle_shaded(fb, fbW, fbH, cl, cx - 74.0f * S, cy + 36.0f * S, 42.0f * S, Color{ 38, 44, 56 }, Color{ 20, 24, 34 }, 255);
-        fill_circle_shaded(fb, fbW, fbH, cl, cx + 74.0f * S, cy + 36.0f * S, 42.0f * S, Color{ 38, 44, 56 }, Color{ 20, 24, 34 }, 255);
+        fill_circle_shaded(fb, fbW, fbH, cl, cx - 74.0f * S, cy + 36.0f * S, 42.0f * S, Color{ 44, 52, 68 }, Color{ 20, 24, 34 }, 255);
+        fill_circle_shaded(fb, fbW, fbH, cl, cx + 74.0f * S, cy + 36.0f * S, 42.0f * S, Color{ 44, 52, 68 }, Color{ 20, 24, 34 }, 255);
 
         // Signature Wide Top Prism Lightbar between shoulders + CUH-ZCT2 Lightbar Slit
-        draw_glow_disc(fb, fbW, fbH, cl, cx, cy - 106.0f * S, 76.0f * S, lightCol, 130);
+        draw_glow_disc(fb, fbW, fbH, cl, cx, cy - 106.0f * S, 86.0f * S, lightCol, 150);
         draw_round_rect_aa(fb, fbW, fbH, cl, cx - 84.0f * S, cy - 110.0f * S, 168.0f * S, 11.0f * S, 5.0f * S,
-                           lightCol, lerp_color(lightCol, Color{ 255, 255, 255 }, 0.25f), 255);
+                           lightCol, lerp_color(lightCol, Color{ 255, 255, 255 }, 0.35f), 255);
         stroke_round_rect_aa(fb, fbW, fbH, cl, cx - 84.0f * S, cy - 110.0f * S, 168.0f * S, 11.0f * S, 5.0f * S,
-                             1.0f, Color{ 16, 20, 28 }, 200);
+                             1.2f, Color{ 16, 20, 28 }, 220);
 
-        // Rectangular Classic Touchpad with textured dots + top ZCT2 light slit
+        // Rectangular Classic Touchpad with micro-dot grid + top ZCT2 light slit
         float tpX = cx - 86.0f * S;
         float tpY = cy - 94.0f * S;
         float tpW = 172.0f * S;
         float tpH = 82.0f * S;
         draw_round_rect_aa(fb, fbW, fbH, cl, tpX, tpY, tpW, tpH, 8.0f * S,
-                           bTpClick ? Color{ 0, 195, 255 } : Color{ 34, 40, 52 },
-                           bTpClick ? Color{ 0, 130, 220 } : Color{ 22, 26, 35 }, 255);
-        stroke_round_rect_aa(fb, fbW, fbH, cl, tpX, tpY, tpW, tpH, 8.0f * S, 1.4f,
-                             bTpClick ? Color{ 130, 245, 255 } : Color{ 62, 72, 92 }, 255);
+                           bTpClick ? Color{ 0, 195, 255 } : Color{ 38, 45, 58 },
+                           bTpClick ? Color{ 0, 130, 220 } : Color{ 22, 26, 36 }, 255);
+        stroke_round_rect_aa(fb, fbW, fbH, cl, tpX, tpY, tpW, tpH, 8.0f * S, 1.5f,
+                             bTpClick ? Color{ 130, 245, 255 } : Color{ 72, 84, 108 }, 255);
+        // Subtle Touchpad Micro-dot matrix
+        {
+            Color dotCol = bTpClick ? Color{ 190, 248, 255 } : Color{ 56, 66, 84 };
+            for (int row = 0; row < 4; row++) {
+                float dy = tpY + 24.0f * S + row * 14.0f * S;
+                for (int col = -5; col <= 5; col++) {
+                    fill_circle_aa(fb, fbW, fbH, cl, cx + col * 12.5f * S, dy, 1.15f * S, dotCol, 170);
+                }
+            }
+        }
         // Thin ZCT2 lightbar strip near top edge of Touchpad
-        draw_round_rect_aa(fb, fbW, fbH, cl, tpX + 10.0f * S, tpY + 6.0f * S, tpW - 20.0f * S, 4.0f * S, 2.0f,
-                           lightCol, lightCol, 220);
+        draw_round_rect_aa(fb, fbW, fbH, cl, tpX + 10.0f * S, tpY + 6.0f * S, tpW - 20.0f * S, 4.5f * S, 2.0f,
+                           lightCol, lerp_color(lightCol, Color{ 255, 255, 255 }, 0.35f), 240);
 
         // Touchpad Finger Points
         for (int f = 0; f < 2; f++) {
@@ -1104,9 +1200,9 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             float btnY0 = cy - 82.0f * S;
             float btnY1 = cy - 58.0f * S;
             draw_capsule_shaded(fb, fbW, fbH, cl, shX, btnY0, shX, btnY1, 6.0f * S, 6.0f * S,
-                                bShare ? Color{ 0, 235, 255 } : Color{ 62, 72, 90 }, Color{ 34, 40, 52 }, 255);
+                                bShare ? Color{ 0, 235, 255 } : Color{ 66, 76, 96 }, Color{ 34, 40, 52 }, 255);
             draw_capsule_shaded(fb, fbW, fbH, cl, opX, btnY0, opX, btnY1, 6.0f * S, 6.0f * S,
-                                bOptions ? Color{ 0, 235, 255 } : Color{ 62, 72, 90 }, Color{ 34, 40, 52 }, 255);
+                                bOptions ? Color{ 0, 235, 255 } : Color{ 66, 76, 96 }, Color{ 34, 40, 52 }, 255);
             if (bShare)   draw_glow_disc(fb, fbW, fbH, cl, shX, (btnY0 + btnY1) * 0.5f, 18.0f * S, Color{ 0, 240, 255 }, 170);
             if (bOptions) draw_glow_disc(fb, fbW, fbH, cl, opX, (btnY0 + btnY1) * 0.5f, 18.0f * S, Color{ 0, 240, 255 }, 170);
         }
@@ -1121,20 +1217,20 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
         {
             float psY = cy + 36.0f * S;
             if (bPs) draw_glow_disc(fb, fbW, fbH, cl, cx, psY, 24.0f * S, Color{ 0, 220, 255 }, 210);
-            fill_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, bPs ? Color{ 0, 200, 255 } : Color{ 38, 44, 56 }, 255);
-            stroke_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.0f * S, 1.3f, bPs ? Color{ 255, 255, 255 } : Color{ 110, 124, 148 }, 255);
+            fill_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.5f * S, bPs ? Color{ 0, 200, 255 } : Color{ 38, 44, 56 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, cx, psY, 12.5f * S, 1.4f, bPs ? Color{ 255, 255, 255 } : Color{ 120, 134, 160 }, 255);
             draw_tiny_text(fb, fbW, fbH, cl, (int)cx, (int)psY, 1, "PS",
-                           bPs ? Color{ 255, 255, 255 } : Color{ 205, 218, 236 }, 255);
+                           bPs ? Color{ 255, 255, 255 } : Color{ 210, 222, 240 }, 255);
         }
 
-        // Left D-Pad Recessed Circular Well + Dark Glossy Cross Keys
+        // Left D-Pad Recessed Circular Well + Dark Glossy Cross Keys with Chevrons
         {
             float dcx = cx - 152.0f * S;
             float dcy = cy - 42.0f * S;
-            fill_circle_shaded(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, Color{ 34, 40, 52 }, Color{ 20, 24, 33 }, 255);
-            stroke_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, 1.2f, Color{ 58, 68, 88 }, 200);
+            fill_circle_shaded(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, Color{ 34, 40, 52 }, Color{ 18, 22, 31 }, 255);
+            stroke_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 44.0f * S, 1.3f, Color{ 68, 80, 102 }, 220);
 
-            Color dkTop = { 54, 62, 78 };
+            Color dkTop = { 58, 66, 84 };
             Color dkBot = { 30, 35, 46 };
             draw_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy - 31.0f * S, 21.0f * S, 22.0f * S, 4.5f * S,
                                bUp ? Color{ 0, 225, 255 } : dkTop, bUp ? Color{ 0, 150, 230 } : dkBot, 255);
@@ -1144,7 +1240,22 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
                                bLeft ? Color{ 0, 225, 255 } : dkTop, bLeft ? Color{ 0, 150, 230 } : dkBot, 255);
             draw_round_rect_aa(fb, fbW, fbH, cl, dcx + 9.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 4.5f * S,
                                bRight ? Color{ 0, 225, 255 } : dkTop, bRight ? Color{ 0, 150, 230 } : dkBot, 255);
-            fill_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 10.0f * S, Color{ 38, 44, 56 }, 255);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy - 31.0f * S, 21.0f * S, 22.0f * S, 4.5f * S, 1.0f, bUp ? Color{ 210, 250, 255 } : Color{ 82, 94, 118 }, 200);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx - 10.5f * S, dcy + 9.0f * S, 21.0f * S, 22.0f * S, 4.5f * S, 1.0f, bDown ? Color{ 210, 250, 255 } : Color{ 82, 94, 118 }, 200);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx - 31.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 4.5f * S, 1.0f, bLeft ? Color{ 210, 250, 255 } : Color{ 82, 94, 118 }, 200);
+            stroke_round_rect_aa(fb, fbW, fbH, cl, dcx + 9.0f * S, dcy - 10.5f * S, 22.0f * S, 21.0f * S, 4.5f * S, 1.0f, bRight ? Color{ 210, 250, 255 } : Color{ 82, 94, 118 }, 200);
+            fill_circle_aa(fb, fbW, fbH, cl, dcx, dcy, 9.5f * S, Color{ 38, 44, 56 }, 255);
+
+            Color chOff = { 126, 140, 168 };
+            Color chOn  = { 255, 255, 255 };
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 4.0f * S, dcy - 19.0f * S, dcx, dcy - 24.5f * S, 1.8f, bUp ? chOn : chOff, 220);
+            draw_line_aa(fb, fbW, fbH, cl, dcx, dcy - 24.5f * S, dcx + 4.0f * S, dcy - 19.0f * S, 1.8f, bUp ? chOn : chOff, 220);
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 4.0f * S, dcy + 19.0f * S, dcx, dcy + 24.5f * S, 1.8f, bDown ? chOn : chOff, 220);
+            draw_line_aa(fb, fbW, fbH, cl, dcx, dcy + 24.5f * S, dcx + 4.0f * S, dcy + 19.0f * S, 1.8f, bDown ? chOn : chOff, 220);
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 19.0f * S, dcy - 4.0f * S, dcx - 24.5f * S, dcy, 1.8f, bLeft ? chOn : chOff, 220);
+            draw_line_aa(fb, fbW, fbH, cl, dcx - 24.5f * S, dcy, dcx - 19.0f * S, dcy + 4.0f * S, 1.8f, bLeft ? chOn : chOff, 220);
+            draw_line_aa(fb, fbW, fbH, cl, dcx + 19.0f * S, dcy - 4.0f * S, dcx + 24.5f * S, dcy, 1.8f, bRight ? chOn : chOff, 220);
+            draw_line_aa(fb, fbW, fbH, cl, dcx + 24.5f * S, dcy, dcx + 19.0f * S, dcy + 4.0f * S, 1.8f, bRight ? chOn : chOff, 220);
 
             struct DDir { float ox, oy; bool on; int pIdx; };
             DDir dirs[4] = {
@@ -1170,6 +1281,9 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             float off = 29.0f * S;
             float btnR = 14.5f * S;
 
+            fill_circle_shaded(fb, fbW, fbH, cl, fcx, fcy, 46.0f * S, Color{ 34, 40, 52 }, Color{ 18, 22, 31 }, 210);
+            stroke_circle_aa(fb, fbW, fbH, cl, fcx, fcy, 46.0f * S, 1.2f, Color{ 62, 74, 96 }, 195);
+
             struct FaceSpec { float x, y; bool on; int pIdx; Color symCol; int symType; };
             FaceSpec faces[4] = {
                 { fcx,       fcy - off, bTriangle, 3, Color{ 50, 225, 160 }, 0 },
@@ -1180,17 +1294,19 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
             for (int fi = 0; fi < 4; fi++) {
                 FaceSpec& f = faces[fi];
                 if (f.on) {
-                    draw_glow_disc(fb, fbW, fbH, cl, f.x, f.y, btnR * 2.1f, f.symCol, 220);
+                    draw_glow_disc(fb, fbW, fbH, cl, f.x, f.y, btnR * 2.2f, f.symCol, 225);
                 }
                 if (m_pulse[f.pIdx] > 0.02f) {
                     stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR + (1.0f - m_pulse[f.pIdx]) * 18.0f * S,
                                      2.4f, f.symCol, (uint8_t)(230 * m_pulse[f.pIdx]));
                 }
-                Color capTop = f.on ? lerp_color(f.symCol, Color{ 255, 255, 255 }, 0.25f) : Color{ 44, 52, 68 };
-                Color capBot = f.on ? f.symCol : Color{ 24, 28, 38 };
+                Color capTop = f.on ? lerp_color(f.symCol, Color{ 255, 255, 255 }, 0.28f) : Color{ 48, 56, 74 };
+                Color capBot = f.on ? f.symCol : Color{ 22, 26, 36 };
                 fill_circle_shaded(fb, fbW, fbH, cl, f.x, f.y, btnR, capTop, capBot, 255);
-                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR, 1.3f,
-                                 f.on ? Color{ 255, 255, 255 } : Color{ 78, 90, 112 }, 255);
+                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR, 1.4f,
+                                 f.on ? Color{ 255, 255, 255 } : Color{ 86, 98, 124 }, 255);
+                stroke_circle_aa(fb, fbW, fbH, cl, f.x, f.y, btnR - 2.2f * S, 1.0f,
+                                 Color{ 255, 255, 255 }, f.on ? 140 : 45);
 
                 Color glyphCol = f.on ? Color{ 255, 255, 255 } : f.symCol;
                 float gr = btnR * 0.48f;
@@ -1229,36 +1345,47 @@ void Controller3DRenderer::render(Scene2D* scene, int vx, int vy, int vw, int vh
         for (int si = 0; si < 2; si++) {
             StickSpec& st = sticks[si];
             float mag = sqrtf(st.dx * st.dx + st.dy * st.dy);
-            // Recessed stick socket & travel boundary ring
-            fill_circle_aa(fb, fbW, fbH, cl, st.wx, st.wy, 33.0f * S, Color{ 10, 12, 18 }, 240);
-            stroke_circle_aa(fb, fbW, fbH, cl, st.wx, st.wy, 33.0f * S, 1.2f,
-                             (mag > 0.14f || st.clicked) ? Color{ 40, 210, 255 } : Color{ 62, 74, 96 }, 230);
+            // Deeper recessed stick socket & compass cardinal tick marks
+            fill_circle_shaded(fb, fbW, fbH, cl, st.wx, st.wy, 34.0f * S, Color{ 8, 10, 16 }, Color{ 16, 20, 30 }, 248);
+            stroke_circle_aa(fb, fbW, fbH, cl, st.wx, st.wy, 34.0f * S, 1.4f,
+                             (mag > 0.14f || st.clicked) ? Color{ 40, 210, 255 } : Color{ 70, 82, 106 }, 235);
+            Color tickCol = (mag > 0.14f || st.clicked) ? Color{ 70, 220, 255 } : Color{ 80, 94, 118 };
+            draw_line_aa(fb, fbW, fbH, cl, st.wx, st.wy - 34.0f * S, st.wx, st.wy - 29.0f * S, 1.4f, tickCol, 200);
+            draw_line_aa(fb, fbW, fbH, cl, st.wx, st.wy + 29.0f * S, st.wx, st.wy + 34.0f * S, 1.4f, tickCol, 200);
+            draw_line_aa(fb, fbW, fbH, cl, st.wx - 34.0f * S, st.wy, st.wx - 29.0f * S, st.wy, 1.4f, tickCol, 200);
+            draw_line_aa(fb, fbW, fbH, cl, st.wx + 29.0f * S, st.wy, st.wx + 34.0f * S, st.wy, 1.4f, tickCol, 200);
 
             float capX = st.wx + st.dx * dzMax;
             float capY = st.wy + st.dy * dzMax;
 
-            // Stick stem & live shadow
+            // Stick gimbal stem & metallic highlight
             if (mag > 0.05f) {
-                draw_line_aa(fb, fbW, fbH, cl, st.wx, st.wy, capX, capY, 14.0f * S, Color{ 18, 22, 32 }, 255);
+                draw_line_aa(fb, fbW, fbH, cl, st.wx, st.wy, capX, capY, 15.0f * S, Color{ 18, 22, 32 }, 255);
+                draw_line_aa(fb, fbW, fbH, cl, st.wx, st.wy, capX, capY, 6.0f * S, Color{ 44, 52, 68 }, 200);
             }
             if (st.clicked) {
-                draw_glow_disc(fb, fbW, fbH, cl, capX, capY, 36.0f * S, Color{ 255, 195, 50 }, 220);
+                draw_glow_disc(fb, fbW, fbH, cl, capX, capY, 38.0f * S, Color{ 255, 195, 50 }, 225);
             } else if (mag > 0.15f) {
-                draw_glow_disc(fb, fbW, fbH, cl, capX, capY, 32.0f * S, Color{ 0, 220, 255 }, 140);
+                draw_glow_disc(fb, fbW, fbH, cl, capX, capY, 34.0f * S, Color{ 0, 220, 255 }, 150);
             }
             if (m_pulse[st.pIdx] > 0.02f) {
                 stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 27.0f * S + (1.0f - m_pulse[st.pIdx]) * 18.0f * S,
                                  2.2f, Color{ 255, 200, 55 }, (uint8_t)(230 * m_pulse[st.pIdx]));
             }
 
-            Color capTop = st.clicked ? Color{ 255, 200, 60 } : Color{ 52, 58, 72 };
-            Color capBot = st.clicked ? Color{ 195, 130, 15 } : Color{ 24, 28, 36 };
+            Color capTop = st.clicked ? Color{ 255, 200, 60 } : Color{ 56, 64, 80 };
+            Color capBot = st.clicked ? Color{ 195, 130, 15 } : Color{ 22, 26, 35 };
             fill_circle_shaded(fb, fbW, fbH, cl, capX, capY, 25.0f * S, capTop, capBot, 255);
-            stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 25.0f * S, 1.8f,
-                             st.clicked ? Color{ 255, 245, 180 } : (mag > 0.14f ? Color{ 60, 230, 255 } : Color{ 88, 100, 122 }), 255);
-            // Textured thumb dome inner rim
-            stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 16.5f * S, 1.3f,
-                             st.clicked ? Color{ 255, 245, 180 } : Color{ 70, 78, 94 }, 210);
+            stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 25.0f * S, 1.9f,
+                             st.clicked ? Color{ 255, 245, 180 } : (mag > 0.14f ? Color{ 60, 230, 255 } : Color{ 94, 108, 134 }), 255);
+            // Double concentric thumb dome rubber grip rings
+            stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 19.5f * S, 1.1f,
+                             st.clicked ? Color{ 255, 235, 160 } : Color{ 76, 86, 106 }, 190);
+            stroke_circle_aa(fb, fbW, fbH, cl, capX, capY, 14.0f * S, 1.2f,
+                             st.clicked ? Color{ 255, 245, 190 } : Color{ 62, 70, 88 }, 215);
+            fill_circle_shaded(fb, fbW, fbH, cl, capX, capY, 11.5f * S,
+                               st.clicked ? Color{ 230, 165, 35 } : Color{ 32, 37, 48 },
+                               st.clicked ? Color{ 170, 110, 12 } : Color{ 18, 21, 29 }, 255);
         }
     }
 
