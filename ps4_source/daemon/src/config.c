@@ -257,6 +257,17 @@ bool daemon_config_check_reload(DaemonConfig *cfg) {
     DaemonConfig old = *cfg;
     daemon_config_load(cfg);
 
+    bool gen_changed = (
+        old.stick_deadzone != cfg->stick_deadzone ||
+        old.trigger_threshold != cfg->trigger_threshold ||
+        old.stick_curve != cfg->stick_curve ||
+        old.rapid_fire != cfg->rapid_fire ||
+        old.swap_triggers_bumpers != cfg->swap_triggers_bumpers ||
+        old.enable_rumble != cfg->enable_rumble ||
+        old.switch_positional != cfg->switch_positional ||
+        old.pro_profile != cfg->pro_profile
+    );
+
     bool ds_changed = (
         old.dualsense_bt_mode != cfg->dualsense_bt_mode ||
         old.dualsense_lightbar_mode != cfg->dualsense_lightbar_mode ||
@@ -264,6 +275,7 @@ bool daemon_config_check_reload(DaemonConfig *cfg) {
         old.dualsense_brightness != cfg->dualsense_brightness ||
         old.dualsense_trigger_mode != cfg->dualsense_trigger_mode ||
         old.dualsense_player_leds != cfg->dualsense_player_leds ||
+        old.dualsense_mute_action != cfg->dualsense_mute_action ||
         old.dualsense_speaker_volume != cfg->dualsense_speaker_volume
     );
 
@@ -273,6 +285,11 @@ bool daemon_config_check_reload(DaemonConfig *cfg) {
         old.ds4_brightness != cfg->ds4_brightness ||
         old.ds4_rumble_boost != cfg->ds4_rumble_boost
     );
+
+    if (gen_changed) {
+        daemon_log(LOG_LEVEL_INFO, "General controller configuration updated from INI (dz=%d, curve=%d, trig=%d, rf=%d, swap=%d, rumble=%d)",
+                   cfg->stick_deadzone, cfg->stick_curve, cfg->trigger_threshold, cfg->rapid_fire, cfg->swap_triggers_bumpers, cfg->enable_rumble);
+    }
 
     if (ds_changed) {
         daemon_log(LOG_LEVEL_INFO, "DualSense configuration changed: applying settings on the fly!");

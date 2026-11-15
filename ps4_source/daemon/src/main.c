@@ -14,6 +14,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
+
+static void write_daemon_version_marker(void) {
+    const char *paths[2] = {
+        "/data/anycontroller/daemon.version",
+        "/user/data/anycontroller/daemon.version"
+    };
+    const char *ver = ONEFAMILY_VERSION_STRING;
+    size_t len = strlen(ver);
+    for (int i = 0; i < 2; i++) {
+        int fd = daemon_sys_open(paths[i], 0x0601 /* O_WRONLY|O_CREAT|O_TRUNC */, 0666);
+        if (fd >= 0) {
+            daemon_sys_write(fd, ver, len);
+            daemon_sys_close(fd);
+        }
+    }
+}
 
 static volatile bool g_running = true;
 
@@ -67,6 +84,7 @@ int main(int argc, char *argv[]) {
     daemon_sys_mkdir("/user/data", 0777);
     daemon_sys_mkdir("/user/data/anycontroller", 0777);
     daemon_sys_mkdir("/user/data/anycontroller/controllers", 0777);
+    write_daemon_version_marker();
 
     // Purge any legacy onefamily files if present
     daemon_sys_unlink("/data/payloads/onefamily.bin");
@@ -181,8 +199,15 @@ int main(int argc, char *argv[]) {
 
         // Smooth 16 Hz animation when native PS4 DS4 is in Dynamic Rainbow (4) or Breathing (5) mode
         if (loop_count % 15 == 0) {
-            if (!vpad_is_active() &&
-                (g_daemon_config.ds4_lightbar_mode == 4 || g_daemon_config.ds4_lightbar_mode == 5)) {
+            if (g_daemon_config.ds4_lightbar_mode == 4 || g_daemon_config.ds4_lightbar_mode == 5) {
+                vpad_apply_ds4_lightbar();
+            }
+        }
+
+        // Maintain static DS4 custom lightbar/brightness at ~6 Hz (every 40 loops = 160ms)
+        // so exiting apps / SceShellUI focus changes never revert custom colors back to default Blue
+        if (loop_count % 40 == 0) {
+            if (g_daemon_config.ds4_lightbar_mode != 0 || g_daemon_config.ds4_brightness != 0) {
                 vpad_apply_ds4_lightbar();
             }
         }
@@ -190,9 +215,7 @@ int main(int argc, char *argv[]) {
         // Periodically check if configuration INI file was updated (every ~2s = 500 loops)
         if (loop_count % 500 == 0) {
             daemon_config_check_reload(&g_daemon_config);
-            if (!vpad_is_active()) {
-                vpad_apply_ds4_lightbar();
-            }
+            vpad_apply_ds4_lightbar();
         }
 
         // Precision sleep to pace exactly at 250 Hz (4000 us)

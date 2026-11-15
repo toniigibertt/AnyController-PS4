@@ -15,6 +15,36 @@
 #include "ui.h"
 #include "hid_profile.h"
 #include "pkg_updater.h"
+#include "onefamily_version.h"
+
+static bool check_running_daemon_version(const char* expectedVer) {
+    const char* paths[2] = {
+        "/data/anycontroller/daemon.version",
+        "/user/data/anycontroller/daemon.version"
+    };
+    for (int i = 0; i < 2; i++) {
+        int fd = sceKernelOpen(paths[i], O_RDONLY, 0);
+        if (fd >= 0) {
+            char buf[64];
+            memset(buf, 0, sizeof(buf));
+            ssize_t rd = sceKernelRead(fd, buf, sizeof(buf) - 1);
+            sceKernelClose(fd);
+            if (rd > 0) {
+                buf[rd] = '\0';
+                char* p = buf;
+                while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+                size_t len = strlen(p);
+                while (len > 0 && (p[len - 1] == ' ' || p[len - 1] == '\t' || p[len - 1] == '\r' || p[len - 1] == '\n')) {
+                    p[--len] = '\0';
+                }
+                if (strcmp(p, expectedVer) == 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
 
 static void notify_daemon_reload() {
     const char* reload_paths[2] = {
@@ -86,7 +116,20 @@ static void request_daemon_rebind_profile() {
 typedef int (*scePadSetLightBarBaseBrightness_t)(int handle, int brightness);
 typedef int (*sceUserServiceSetLightBarBaseBrightness_t)(int userId, int brightness);
 
-static void apply_live_pad_lightbar(int padHandles[4], const AppConfig& cfg) {
+static void apply_live_pad_lightbar(int padHandles[4], const AppConfig& cfg, bool isDualSenseActive) {
+    if (isDualSenseActive) {
+        // El halo RGB del DualSense PS5 lo controla directamente el demonio vía reporte BT 0x31.
+        // Evitamos sobrescribir con el color de DS4 dentro de la app.
+        if (cfg.ds_lightbar_mode == 0) {
+            for (int i = 0; i < 4; i++) {
+                if (padHandles[i] >= 0) {
+                    scePadResetLightBar(padHandles[i]);
+                }
+            }
+        }
+        return;
+    }
+
     static bool s_resolved = false;
     static scePadSetLightBarBaseBrightness_t s_padSetBaseBr = NULL;
     static sceUserServiceSetLightBarBaseBrightness_t s_userSetBaseBr = NULL;
@@ -262,7 +305,15 @@ int main() {
     int padHandles[4];
     for (int i = 0; i < 4; i++) padHandles[i] = -1;
     refresh_pad_handles(padHandles, userId);
-    apply_live_pad_lightbar(padHandles, configMgr.getConfig());
+    {
+        HidStatus initHid;
+        HidProfile::read_status(initHid);
+        bool initDsActive = (initHid.connected &&
+                             (initHid.type == "dualsense" ||
+                              initHid.type == "dualsense_bt" ||
+                              (initHid.vid == 0x054C && (initHid.pid == 0x0CE6 || initHid.pid == 0x0DF2))));
+        apply_live_pad_lightbar(padHandles, configMgr.getConfig(), initDsActive);
+    }
 
     // Check if First-Launch Setup Wizard or Payload Update is required
     bool isInstalled = Installer::isInstalled();
@@ -354,6 +405,12 @@ int main() {
     updater.start_check();
     UpdaterState lastUpdaterState = UPDATER_IDLE;
 
+    // Warn if the GoldHEN daemon loaded in PS4 RAM is not yet this exact version
+    if (!check_running_daemon_version(ONEFAMILY_VERSION_STRING)) {
+        toastText = std::string("Reinicia la PS4 1 vez para activar el nuevo demonio ") + ONEFAMILY_VERSION_STRING + " en memoria";
+        toastFrames = 360;
+    }
+
     // Main Interaction Loop
     for (;;) {
         // Check if daemon requested physical DS4 disconnect upon PS5 DualSense connection
@@ -376,10 +433,6 @@ int main() {
         // Periodically refresh controller handles to support dynamic reconnects and multi-user login
         if (frameID % 30 == 0) {
             refresh_pad_handles(padHandles, userId);
-            apply_live_pad_lightbar(padHandles, configMgr.getConfig());
-        } else if (frameID % 3 == 0 &&
-                   (configMgr.getConfig().ds4_lightbar_mode == 4 || configMgr.getConfig().ds4_lightbar_mode == 5)) {
-            apply_live_pad_lightbar(padHandles, configMgr.getConfig());
         }
 
         OrbisPadData padDataSlots[4];
@@ -499,6 +552,14 @@ int main() {
         // Keep both DualSense PS5 and DualShock 4 tabs available in sidebar so user is never locked out,
         // and auto-switch between them whenever a DualSense connects or disconnects!
         bool hasDualSense = true;
+
+        // Live lightbar sync now that isDualSenseActive is freshly evaluated
+        if (frameID % 30 == 0) {
+            apply_live_pad_lightbar(padHandles, configMgr.getConfig(), isDualSenseActive);
+        } else if (frameID % 3 == 0 && !isDualSenseActive &&
+                   (configMgr.getConfig().ds4_lightbar_mode == 4 || configMgr.getConfig().ds4_lightbar_mode == 5)) {
+            apply_live_pad_lightbar(padHandles, configMgr.getConfig(), false);
+        }
 
         static int s_prevDualSenseActive = -1;
         if (s_prevDualSenseActive == -1) {
@@ -620,7 +681,7 @@ int main() {
                 cfg.apply_pro_profile(nextPreset);
                 configMgr.save();
                 notify_daemon_reload();
-                apply_live_pad_lightbar(padHandles, cfg);
+                apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                 toastText = "¡Perfil Maestro Pro activado: " + ConfigManager::PRO_PROFILE_OPTIONS[cfg.pro_profile_index] + "!";
                 toastFrames = 180;
             }
@@ -651,7 +712,7 @@ int main() {
                 if (changed) {
                     configMgr.save();
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                 }
             }
 
@@ -689,7 +750,7 @@ int main() {
                 if (changed) {
                     configMgr.save();
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                 }
             }
 
@@ -697,7 +758,7 @@ int main() {
             if (justPressed & ORBIS_PAD_BUTTON_CROSS) {
                 if (configMgr.save()) {
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                     toastText = "¡Ajustes Pro guardados en /data/anycontroller/anycontroller.ini!";
                     toastFrames = 180; // ~3 seconds toast feedback
                 }
@@ -886,7 +947,7 @@ int main() {
                 if (dsChanged) {
                     configMgr.save();
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                 }
             }
 
@@ -930,7 +991,7 @@ int main() {
                 if (dsChanged) {
                     configMgr.save();
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                 }
             }
 
@@ -992,7 +1053,7 @@ int main() {
                 if (ds4Changed) {
                     configMgr.save();
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                 }
             }
 
@@ -1026,7 +1087,7 @@ int main() {
                 if (ds4Changed) {
                     configMgr.save();
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                 }
             }
 
@@ -1062,7 +1123,7 @@ int main() {
             if (justPressed & ORBIS_PAD_BUTTON_CROSS) {
                 if (configMgr.save()) {
                     notify_daemon_reload();
-                    apply_live_pad_lightbar(padHandles, cfg);
+                    apply_live_pad_lightbar(padHandles, cfg, isDualSenseActive);
                     toastText = "¡Ajustes del mando DualShock 4 aplicados en vivo!";
                     toastFrames = 180;
                 }
@@ -1150,6 +1211,11 @@ int main() {
         scene->FrameBufferSwap();
         frameID++;
     }
+
+    // Persist latest settings & flush daemon reload before releasing scePad handles
+    configMgr.save();
+    notify_daemon_reload();
+    usleep(250000);
 
     for (int i = 0; i < 4; i++) {
         if (padHandles[i] >= 0) {

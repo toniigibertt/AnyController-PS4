@@ -7,12 +7,12 @@
 #define ONEFAMILY_VERSION_H
 
 #define ONEFAMILY_VERSION_MAJOR     1
-#define ONEFAMILY_VERSION_MINOR     3
-#define ONEFAMILY_VERSION_PATCH     9
-#define ONEFAMILY_VERSION_RAW       "1.3.9"
-#define ONEFAMILY_VERSION_STRING    "v1.3.9"
-#define ONEFAMILY_VERSION_SFO       "01.39"
-#define ONEFAMILY_VERSION_TITLE     "Controller Control Center PS4 - Multi-DualSense BT & UI Fix"
-#define ONEFAMILY_VERSION_FULL      "v1.3.9 (Controller Control Center PS4)"
+#define ONEFAMILY_VERSION_MINOR     4
+#define ONEFAMILY_VERSION_PATCH     0
+#define ONEFAMILY_VERSION_RAW       "1.4.0"
+#define ONEFAMILY_VERSION_STRING    "v1.4.0"
+#define ONEFAMILY_VERSION_SFO       "01.40"
+#define ONEFAMILY_VERSION_TITLE     "Controller Control Center PS4 - Aislamiento DualSense P2, Persistencia LED y Guías"
+#define ONEFAMILY_VERSION_FULL      "v1.4.0 (Controller Control Center PS4)"
 
 #endif // ONEFAMILY_VERSION_H

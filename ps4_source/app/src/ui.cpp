@@ -17,9 +17,9 @@ static const int SIDEBAR_X = 56;
 static const int SIDEBAR_W = 320;
 static const int CARD_X = 410;
 static const int CARD_W = 1140;
-static const int CARD_H = 92;
-static const int CARD_Y_START = 280;
-static const int CARD_Y_STEP = 104;
+static const int CARD_H = 82;
+static const int CARD_Y_START = 264;
+static const int CARD_Y_STEP = 90;
 
 // Colors - AnyController Studio Original Obsidian & Cyber Cyan Palette
 static const Color COLOR_BLUE_GLOW   = { 0, 95, 165 };
@@ -313,6 +313,25 @@ void UI::draw_btn_badge(Scene2D* scene, int x, int y, int w, int h, const char* 
     draw_text_centered(scene, label, fontCardDesc, x + w / 2, y + 21, pressed ? COLOR_WHITE : COLOR_TEXT_DIM);
 }
 
+void UI::draw_option_guide_box(Scene2D* scene, const char* optionTitle, const char* whatItDoes, const char* currentValEffect, Color accentColor) {
+    if (!scene) return;
+    const int GX = 410;
+    const int GY = 736;
+    const int GW = 1440;
+    const int GH = 114;
+
+    draw_rounded_rect(scene, GX, GY, GW, GH, 10, Color{ 10, 18, 34 });
+    draw_rounded_outline(scene, GX, GY, GW, GH, 10, accentColor, 1);
+    draw_rounded_rect(scene, GX, GY, 6, GH, 3, accentColor);
+
+    std::string hdr = std::string("QUÉ CAMBIA ESTA OPCIÓN EN TU MANDO  •  ") + (optionTitle ? optionTitle : "");
+    draw_text(scene, hdr, fontFooter, GX + 24, GY + 29, COLOR_BLUE_BRIGHT);
+    draw_text(scene, whatItDoes ? whatItDoes : "", fontCardDesc, GX + 24, GY + 58, COLOR_WHITE);
+
+    std::string eff = std::string("Efecto actual: ") + (currentValEffect ? currentValEffect : "");
+    draw_text(scene, eff, fontCardDesc, GX + 24, GY + 90, Color{ 0, 255, 160 });
+}
+
 void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int selectedCard,
                 int toastFrames, const OrbisPadData& padData, const TesterState& tester,
                 const char* toastMsg,
@@ -417,12 +436,12 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
     // 4. Main Content Area
     if (currentTabId == TAB_SETTINGS) {
         // Section Banner for Global Settings
-        draw_rounded_rect(scene, CARD_X, 145, CARD_W + 300, 110, 12, Color{ 13, 23, 42 });
-        draw_rounded_outline(scene, CARD_X, 145, CARD_W + 300, 110, 12, COLOR_CARD_BORDER, 1);
-        draw_rounded_rect(scene, CARD_X, 145, 6, 110, 3, COLOR_BLUE_MAIN);
-        draw_image(scene, iconGear, CARD_X + 26, 175);
-        draw_text(scene, "Motor Pro de Respuesta, Curvas de Joysticks y Turbo", fontCardTitle, CARD_X + 88, 190, COLOR_WHITE);
-        draw_text(scene, "Perfiles rápidos eSports/SimRacing/Eco, curvas analógicas y fuego rápido en tiempo real (/data/anycontroller/anycontroller.ini).", fontCardDesc, CARD_X + 88, 222, COLOR_TEXT_DIM);
+        draw_rounded_rect(scene, CARD_X, 145, CARD_W + 300, 104, 12, Color{ 13, 23, 42 });
+        draw_rounded_outline(scene, CARD_X, 145, CARD_W + 300, 104, 12, COLOR_CARD_BORDER, 1);
+        draw_rounded_rect(scene, CARD_X, 145, 6, 104, 3, COLOR_BLUE_MAIN);
+        draw_image(scene, iconGear, CARD_X + 26, 173);
+        draw_text(scene, "Motor Pro de Respuesta, Curvas de Joysticks y Turbo", fontCardTitle, CARD_X + 88, 188, COLOR_WHITE);
+        draw_text(scene, "Perfiles rápidos eSports/SimRacing/Eco, curvas analógicas y fuego rápido en tiempo real (/data/anycontroller/anycontroller.ini).", fontCardDesc, CARD_X + 88, 220, COLOR_TEXT_DIM);
 
         // --- SETTINGS VIEW (8 Cards, 5 Visible with Scroll) ---
         const int TOTAL_CARDS = 8;
@@ -492,14 +511,14 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
                 draw_rounded_outline(scene, CARD_X, cardY, fullCardW, CARD_H, 12, COLOR_CARD_BORDER, 1);
             }
 
-            draw_image(scene, cardIcons[cardIndex], CARD_X + 24, cardY + 22);
+            draw_image(scene, cardIcons[cardIndex], CARD_X + 24, cardY + 17);
 
-            draw_text(scene, cardTitles[cardIndex], fontCardTitle, CARD_X + 88, cardY + 38, COLOR_WHITE);
-            draw_text(scene, cardDescs[cardIndex],  fontCardDesc,  CARD_X + 88, cardY + 68, COLOR_TEXT_DIM);
+            draw_text(scene, cardTitles[cardIndex], fontCardTitle, CARD_X + 88, cardY + 33, COLOR_WHITE);
+            draw_text(scene, cardDescs[cardIndex],  fontCardDesc,  CARD_X + 88, cardY + 61, COLOR_TEXT_DIM);
 
             // Sleek Value Selector Box on the right
             int boxW = 310;
-            int boxH = 48;
+            int boxH = 44;
             int boxX = selectorCenterX - boxW / 2;
             int boxY = cardY + (CARD_H - boxH) / 2;
             draw_rounded_rect(scene, boxX, boxY, boxW, boxH, 8, isSelected ? Color{ 10, 22, 42 } : Color{ 8, 13, 24 });
@@ -508,17 +527,83 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
             Color textColor  = isSelected ? COLOR_BLUE_BRIGHT : COLOR_WHITE;
             Color arrowColor = isSelected ? COLOR_WHITE : COLOR_TEXT_DIM;
 
-            draw_text_centered(scene, vals[cardIndex], fontValue, selectorCenterX, cardY + 54, textColor);
-            draw_text(scene, "<", fontValue, boxX + 16, cardY + 54, arrowColor);
-            draw_text(scene, ">", fontValue, boxX + boxW - 28, cardY + 54, arrowColor);
+            draw_text_centered(scene, vals[cardIndex], fontValue, selectorCenterX, cardY + 49, textColor);
+            draw_text(scene, "<", fontValue, boxX + 16, cardY + 49, arrowColor);
+            draw_text(scene, ">", fontValue, boxX + boxW - 28, cardY + 49, arrowColor);
         }
 
         if (scrollOffset > 0) {
-            draw_text(scene, "^", fontCardTitle, CARD_X + fullCardW / 2, 275, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "^", fontCardTitle, CARD_X + fullCardW / 2, 260, COLOR_BLUE_BRIGHT);
         }
         if (scrollOffset + VISIBLE_CARDS < TOTAL_CARDS) {
-            draw_text(scene, "v", fontCardTitle, CARD_X + fullCardW / 2, CARD_Y_START + VISIBLE_CARDS * CARD_Y_STEP - 2, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "v", fontCardTitle, CARD_X + fullCardW / 2, 724, COLOR_BLUE_BRIGHT);
         }
+
+        // Dynamic explanation panel for selected Global Setting
+        static const char* settingWhat[TOTAL_CARDS] = {
+            "Aplica al instante una combinación completa de zona muerta, curva analógica, gatillos, vibración e iluminación.",
+            "Fija el radio central mínimo en las palancas L3 y R3 que el demonio ignora antes de enviar movimiento a la consola.",
+            "Cambia la relación entre el ángulo físico de la palanca y la velocidad de movimiento enviada al juego.",
+            "Ajusta el punto exacto de recorrido analógico (0-255) desde el que L2 y R2 cuentan como disparo digital.",
+            "Genera pulsaciones automáticas repetidas (~15/s) mientras mantienes apretado el gatillo casi a fondo (>= 220).",
+            "Intercambia los botones superiores L1/R1 con los gatillos inferiores L2/R2 en todo el sistema PS4.",
+            "Interruptor maestro que habilita o silencia globalmente la vibración de motores en todos los mandos.",
+            "En mandos Nintendo Switch Pro/Joy-Con decide si A/B/X/Y obedecen la posición PlayStation o la letra impresa."
+        };
+        int selIdx = (selectedCard >= 0 && selectedCard < TOTAL_CARDS) ? selectedCard : 0;
+        std::string settingEff;
+        if (selIdx == 0) {
+            static const char* proEff[5] = {
+                "Personalizado: mantiene tus ajustes individuales actuales sin sobrescribirlos.",
+                "eSports FPS: zona muerta 5%, curva Agresiva, gatillos al 6%, Hair Trigger PS5 y motores apagados.",
+                "SimRacing: zona muerta 8%, curva Exponencial suave, resistencia continua L2/R2 y vibración al 120%.",
+                "Modo Eco: apaga barras LED y vibración/gatillos para maximizar las horas de batería.",
+                "Estándar PS4/PS5: restaura los valores equilibrados originales de fábrica para cualquier juego."
+            };
+            int pi = (cfg.pro_profile_index >= 0 && cfg.pro_profile_index < 5) ? cfg.pro_profile_index : 0;
+            settingEff = proEff[pi];
+        } else if (selIdx == 1) {
+            char buf[192];
+            int dzRaw = ConfigManager::DEADZONE_VALUES[cfg.deadzone_index];
+            snprintf(buf, sizeof(buf), "Umbral %s (%d/127): cualquier vibración de drift por debajo de este radio se corrige a centro exacto.",
+                     vals[1].c_str(), dzRaw);
+            settingEff = buf;
+        } else if (selIdx == 2) {
+            static const char* curveEff[3] = {
+                "Lineal (1:1): respuesta directa sin alteraciones, exactamente proporcional al desplazamiento del stick.",
+                "Precisión Exponencial: suaviza los movimientos cortos para apuntar fino y acelera al llegar al borde.",
+                "Agresiva eSports: alcanza antes la velocidad máxima para giros y reacciones rápidas en shooters."
+            };
+            int ci = (cfg.stick_curve_index >= 0 && cfg.stick_curve_index < 3) ? cfg.stick_curve_index : 0;
+            settingEff = curveEff[ci];
+        } else if (selIdx == 3) {
+            char buf[192];
+            int thRaw = ConfigManager::TRIGGER_VALUES[cfg.trigger_index];
+            snprintf(buf, sizeof(buf), "Umbral %s (%d/255): al pulsar L2 o R2 por encima de este punto el botón digital dispara al instante.",
+                     vals[3].c_str(), thRaw);
+            settingEff = buf;
+        } else if (selIdx == 4) {
+            static const char* rfEff[3] = {
+                "Desactivado: L2 y R2 funcionan de forma normal y continua sin ráfagas automáticas.",
+                "Turbo R2: al mantener R2 presionado a fondo dispara ráfagas automáticas continuas (~15 por segundo).",
+                "Turbo Dual L2+R2: dispara ráfagas automáticas tanto al apretar L2 como R2 a fondo."
+            };
+            int ri = (cfg.rapid_fire_index >= 0 && cfg.rapid_fire_index < 3) ? cfg.rapid_fire_index : 0;
+            settingEff = rfEff[ri];
+        } else if (selIdx == 5) {
+            settingEff = (cfg.swap_index != 0)
+                ? "Activado: apuntas y disparas con los botones rápidos L1/R1; L2/R2 hacen las funciones superiores."
+                : "Desactivado: disposición clásica estándar (L1/R1 arriba y gatillos L2/R2 abajo).";
+        } else if (selIdx == 6) {
+            settingEff = (cfg.rumble_index == 0)
+                ? "Activado: el mando vibra normalmente siguiendo la intensidad enviada por los juegos."
+                : "Desactivado: bloquea todas las órdenes de vibración para ahorrar batería o evitar distracciones.";
+        } else {
+            settingEff = (cfg.switch_index == 0)
+                ? "Por Posición: el botón inferior (B) es Cruz (X) y el derecho (A) es Círculo (O), igual que en PS4."
+                : "Por Letra: A de Nintendo equivale a Cruz (X) y X equivale a Cuadrado según el texto del botón.";
+        }
+        draw_option_guide_box(scene, cardTitles[selIdx], settingWhat[selIdx], settingEff.c_str(), COLOR_BLUE_MAIN);
 
         // 5. Footer for Settings
         scene->DrawRectangle(56, 865, 1808, 2, COLOR_DIVIDER);
@@ -760,7 +845,7 @@ void UI::render_wizard(Scene2D* scene, const InstallResult& res, int frameID) {
         draw_text(scene, "3. ¡Todas las funciones de color LED, gatillos, drift y vibración están activas!", fontCardDesc, cardX + 50, stepY, COLOR_BLUE_BRIGHT);
 
         stepY += 36;
-        draw_text(scene, "4. Reinicia tu PS4 si es la primera vez que activas el demonio en segundo plano.", fontCardDesc, cardX + 50, stepY, COLOR_TEXT_DIM);
+        draw_text(scene, "4. IMPORTANTE: Reinicia tu PS4 una vez tras actualizar el PKG para cargar el demonio " ONEFAMILY_VERSION_STRING " en RAM.", fontCardDesc, cardX + 50, stepY, COLOR_TEXT_DIM);
     } else {
         draw_text(scene, "Pasos siguientes para activar tu mando en PS4:", fontCardTitle, cardX + 50, divY + 38, COLOR_WHITE);
 
@@ -1458,12 +1543,12 @@ void UI::render_remap(Scene2D* scene, const HidStatus& status, const HidProfile&
 
 void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard, const HidStatus& status) {
     // Top Exclusive Banner for PS5 DualSense
-    draw_rounded_rect(scene, 410, 145, 1440, 110, 12, Color{ 13, 24, 46 });
-    draw_rounded_outline(scene, 410, 145, 1440, 110, 12, COLOR_BLUE_MAIN, 1);
-    draw_rounded_rect(scene, 410, 145, 6, 110, 3, COLOR_BLUE_BRIGHT);
-    draw_image(scene, btnPs, 436, 175);
-    draw_text(scene, "Centro Exclusivo para Mandos PlayStation 5 (DualSense / DualSense Edge)", fontCardTitle, 496, 190, COLOR_WHITE);
-    draw_text(scene, "Control dedicado de Gatillos Adaptativos L2/R2, Altavoz Interno, LEDs de Jugador, Botón Mute y Reportes BT de 78 Bytes.", fontCardDesc, 496, 222, COLOR_BLUE_BRIGHT);
+    draw_rounded_rect(scene, 410, 145, 1440, 104, 12, Color{ 13, 24, 46 });
+    draw_rounded_outline(scene, 410, 145, 1440, 104, 12, COLOR_BLUE_MAIN, 1);
+    draw_rounded_rect(scene, 410, 145, 6, 104, 3, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnPs, 436, 173);
+    draw_text(scene, "Centro Exclusivo para Mandos PlayStation 5 (DualSense / DualSense Edge)", fontCardTitle, 496, 188, COLOR_WHITE);
+    draw_text(scene, "Control dedicado de Gatillos Adaptativos L2/R2, Halo LED RGB, LEDs de Jugador, Botón Mute y Reportes BT de 78 Bytes.", fontCardDesc, 496, 220, COLOR_BLUE_BRIGHT);
 
     const int TOTAL_CARDS = 8;
     const int VISIBLE_CARDS = 5;
@@ -1558,14 +1643,14 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
 
     const int DS_CARD_X = 410;
     const int DS_CARD_W = 880;
-    const int DS_CARD_H = 96;
-    const int DS_CARD_SPACING = 14;
+    const int DS_CARD_H = 82;
+    const int DS_CARD_SPACING = 8;
 
     for (int i = 0; i < VISIBLE_CARDS; i++) {
         int cardIdx = i + scrollOffset;
         if (cardIdx >= TOTAL_CARDS) break;
 
-        int cardY = 280 + i * (DS_CARD_H + DS_CARD_SPACING);
+        int cardY = 264 + i * (DS_CARD_H + DS_CARD_SPACING);
         bool isSelected = (cardIdx == selectedCard);
 
         draw_rounded_rect(scene, DS_CARD_X, cardY, DS_CARD_W, DS_CARD_H, 12, isSelected ? Color{ 16, 30, 54 } : COLOR_CARD_BG);
@@ -1573,41 +1658,41 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         if (isSelected) {
             draw_rounded_outline(scene, DS_CARD_X - 1, cardY - 1, DS_CARD_W + 2, DS_CARD_H + 2, 12, COLOR_BLUE_GLOW, 2);
             draw_rounded_outline(scene, DS_CARD_X, cardY, DS_CARD_W, DS_CARD_H, 12, COLOR_BLUE_MAIN, 2);
-            draw_rounded_rect(scene, DS_CARD_X, cardY + 14, 5, DS_CARD_H - 28, 2, COLOR_BLUE_BRIGHT);
+            draw_rounded_rect(scene, DS_CARD_X, cardY + 12, 5, DS_CARD_H - 24, 2, COLOR_BLUE_BRIGHT);
         } else {
             draw_rounded_outline(scene, DS_CARD_X, cardY, DS_CARD_W, DS_CARD_H, 12, COLOR_CARD_BORDER, 1);
         }
 
         if (cardIcons[cardIdx]) {
-            draw_image(scene, *cardIcons[cardIdx], DS_CARD_X + 20, cardY + 24);
+            draw_image(scene, *cardIcons[cardIdx], DS_CARD_X + 20, cardY + 17);
         }
 
-        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS_CARD_X + 80, cardY + 38, COLOR_WHITE);
-        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS_CARD_X + 80, cardY + 70, COLOR_TEXT_DIM);
+        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS_CARD_X + 80, cardY + 33, COLOR_WHITE);
+        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS_CARD_X + 80, cardY + 61, COLOR_TEXT_DIM);
 
         int vBoxW = 290;
-        int vBoxH = 48;
+        int vBoxH = 44;
         int vBoxX = DS_CARD_X + DS_CARD_W - vBoxW - 18;
         int vBoxY = cardY + (DS_CARD_H - vBoxH) / 2;
         draw_rounded_rect(scene, vBoxX, vBoxY, vBoxW, vBoxH, 8, isSelected ? Color{ 10, 22, 42 } : Color{ 8, 13, 24 });
         draw_rounded_outline(scene, vBoxX, vBoxY, vBoxW, vBoxH, 8, isSelected ? COLOR_BLUE_BRIGHT : COLOR_BORDER_DIM, 1);
 
         if (isSelected) {
-            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 54, COLOR_BLUE_BRIGHT);
-            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 54, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 49, COLOR_BLUE_BRIGHT);
+            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 49, COLOR_BLUE_BRIGHT);
         }
 
         if (cardIdx == 1) {
             int c_idx = cfg.ds_lightbar_color;
             if (c_idx >= 0 && c_idx < 6) {
-                draw_circle(scene, vBoxX + 36, cardY + 48, 7, colorPreviews[c_idx]);
-                draw_circle_outline(scene, vBoxX + 36, cardY + 48, 7, COLOR_WHITE, 1);
+                draw_circle(scene, vBoxX + 36, cardY + 41, 7, colorPreviews[c_idx]);
+                draw_circle_outline(scene, vBoxX + 36, cardY + 41, 7, COLOR_WHITE, 1);
             }
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 54, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 49, COLOR_WHITE);
         } else if (cardIdx == 5) {
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 44, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 40, COLOR_WHITE);
             int vBarX = vBoxX + 55;
-            int vBarY = cardY + 60;
+            int vBarY = cardY + 55;
             int vBarW = 180;
             int vBarH = 6;
             draw_rounded_rect(scene, vBarX, vBarY, vBarW, vBarH, 3, Color{ 15, 25, 40 });
@@ -1618,27 +1703,27 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
                 draw_rounded_rect(scene, vBarX, vBarY, fillW, vBarH, 3, fillCol);
             }
         } else {
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 54, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 49, COLOR_WHITE);
         }
     }
 
     if (scrollOffset > 0) {
-        draw_text(scene, "^", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 275, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "^", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 260, COLOR_BLUE_BRIGHT);
     }
     if (scrollOffset + VISIBLE_CARDS < TOTAL_CARDS) {
-        draw_text(scene, "v", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 280 + VISIBLE_CARDS * (DS_CARD_H + DS_CARD_SPACING) - 2, COLOR_BLUE_BRIGHT);
+        draw_text(scene, "v", fontCardTitle, DS_CARD_X + DS_CARD_W / 2, 724, COLOR_BLUE_BRIGHT);
     }
 
     // Right-Hand PS5 DualSense Multi-Controller Telemetry & Battery Box
     const int BOX_X = 1310;
-    const int BOX_Y = 280;
+    const int BOX_Y = 264;
     const int BOX_W = 540;
-    const int BOX_H = 536;
+    const int BOX_H = 442;
 
     draw_rounded_rect(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BG);
     draw_rounded_outline(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BORDER, 1);
 
-    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 22);
+    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 14);
     char dsHeader[64];
     int activeDevs = (int)status.devices.size();
     if (activeDevs > 1) {
@@ -1646,15 +1731,15 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
     } else {
         snprintf(dsHeader, sizeof(dsHeader), "Telemetría PS5 DualSense");
     }
-    draw_text(scene, dsHeader, fontCardTitle, BOX_X + 76, BOX_Y + 40, COLOR_WHITE);
-    draw_text(scene, "Batería Exacta, Carga USB-C y Perfiles PS4 en Vivo", fontCardDesc, BOX_X + 76, BOX_Y + 62, COLOR_BLUE_BRIGHT);
+    draw_text(scene, dsHeader, fontCardTitle, BOX_X + 76, BOX_Y + 34, COLOR_WHITE);
+    draw_text(scene, "Batería Exacta, Carga USB-C y Perfiles PS4", fontCardDesc, BOX_X + 76, BOX_Y + 54, COLOR_BLUE_BRIGHT);
 
-    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 76, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
+    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 66, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
 
-    // Build list of up to 4 slots to display
+    // Build list of up to 3 slots to display inside telemetry box
     int numToShow = (activeDevs > 0) ? activeDevs : 1;
-    if (numToShow > 3) numToShow = 3; // Fit up to 3 detailed cards cleanly in box
-    int curY = BOX_Y + 90;
+    if (numToShow > 3) numToShow = 3;
+    int curY = BOX_Y + 76;
 
     for (int d = 0; d < numToShow; d++) {
         int slotNum = d + 1;
@@ -1662,7 +1747,6 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         bool chg = status.battery_charging;
         int bstat = status.battery_status;
         std::string uname = status.user_name;
-        std::string macStr = "";
 
         if (d < (int)status.devices.size()) {
             slotNum = (status.devices[d].player_slot > 0) ? status.devices[d].player_slot : (d + 1);
@@ -1670,24 +1754,22 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
             chg = status.devices[d].battery_charging;
             bstat = status.devices[d].battery_status;
             uname = status.devices[d].user_name;
-            macStr = status.devices[d].mac;
         }
 
-        int cardH = (numToShow == 1) ? 132 : 96;
+        int cardH = (numToShow == 1) ? 118 : ((numToShow == 2) ? 112 : 80);
+        int gap = (numToShow == 3) ? 5 : 8;
         draw_rounded_rect(scene, BOX_X + 22, curY, BOX_W - 44, cardH, 10, Color{ 14, 24, 42 });
         draw_rounded_outline(scene, BOX_X + 22, curY, BOX_W - 44, cardH, 10, (chg || bstat == 1) ? Color{ 0, 240, 180 } : COLOR_BORDER_DIM, 1);
 
-        // Player Slot + Assigned PS4 User Profile
-        draw_circle(scene, BOX_X + 40, curY + 24, 5, Color{ 0, 255, 140 });
+        draw_circle(scene, BOX_X + 40, curY + 21, 5, Color{ 0, 255, 140 });
         char pTitle[128];
         if (!uname.empty()) {
             snprintf(pTitle, sizeof(pTitle), "Jugador %d • Perfil: %s", slotNum, uname.c_str());
         } else {
             snprintf(pTitle, sizeof(pTitle), "Jugador %d • DualSense BT", slotNum);
         }
-        draw_text(scene, pTitle, fontCardTitle, BOX_X + 54, curY + 30, COLOR_WHITE);
+        draw_text(scene, pTitle, fontCardTitle, BOX_X + 54, curY + 27, COLOR_WHITE);
 
-        // Exact Battery % + Charging State Badge
         char bLabel[64];
         Color bTextCol = COLOR_BLUE_BRIGHT;
         if (bstat == 1 || chg) {
@@ -1700,13 +1782,12 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
             snprintf(bLabel, sizeof(bLabel), "Batería: %d%%", batt);
             bTextCol = (batt <= 20) ? Color{ 255, 80, 80 } : COLOR_BLUE_BRIGHT;
         }
-        draw_text(scene, bLabel, fontCardDesc, BOX_X + 40, curY + 58, bTextCol);
+        draw_text(scene, bLabel, fontCardDesc, BOX_X + 40, curY + 49, bTextCol);
 
-        // Battery Progress Bar
         int barX = BOX_X + 40;
-        int barY = curY + 68;
+        int barY = curY + 57;
         int barW = BOX_W - 80;
-        int barH = 14;
+        int barH = 12;
         draw_rounded_rect(scene, barX, barY, barW, barH, 4, Color{ 10, 16, 28 });
         draw_rounded_outline(scene, barX, barY, barW, barH, 4, COLOR_BORDER_DIM, 1);
 
@@ -1719,20 +1800,87 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
         }
 
         if (numToShow == 1) {
-            draw_text(scene, "Carga USB-C activa: Puedes cargar por cable mientras juegas por BT.", fontCardDesc, BOX_X + 40, curY + 112, COLOR_TEXT_DIM);
+            draw_text(scene, "Carga USB-C activa: puedes cargar por cable mientras juegas por BT.", fontCardDesc, BOX_X + 40, curY + 98, COLOR_TEXT_DIM);
         }
 
-        curY += cardH + 10;
+        curY += cardH + gap;
     }
 
     // Multiplayer & Profile Selector Action Card at bottom of Telemetry Box
-    int mpY = BOX_Y + 394;
-    draw_rounded_rect(scene, BOX_X + 22, mpY, BOX_W - 44, 122, 10, Color{ 15, 32, 58 });
-    draw_rounded_outline(scene, BOX_X + 22, mpY, BOX_W - 44, 122, 10, COLOR_BLUE_MAIN, 1);
-    draw_image(scene, btnTriangle, BOX_X + 36, mpY + 16);
-    draw_text(scene, "Multijugador Local y Cambio de Perfil PS4", fontCardTitle, BOX_X + 82, mpY + 38, Color{ 0, 255, 160 });
-    draw_text(scene, "Pulsa [TRIÁNGULO] aquí o (Create + Cruceta Izq) en el mando", fontCardDesc, BOX_X + 36, mpY + 70, COLOR_WHITE);
-    draw_text(scene, "para abrir '¿Quién está usando este mando?' y elegir perfil.", fontCardDesc, BOX_X + 36, mpY + 98, COLOR_BLUE_BRIGHT);
+    int mpY = BOX_Y + 332;
+    draw_rounded_rect(scene, BOX_X + 22, mpY, BOX_W - 44, 98, 10, Color{ 15, 32, 58 });
+    draw_rounded_outline(scene, BOX_X + 22, mpY, BOX_W - 44, 98, 10, COLOR_BLUE_MAIN, 1);
+    draw_image(scene, btnTriangle, BOX_X + 34, mpY + 10);
+    draw_text(scene, "Multijugador Local y Perfil PS4", fontCardTitle, BOX_X + 80, mpY + 32, Color{ 0, 255, 160 });
+    draw_text(scene, "Pulsa [TRIÁNGULO] o (Create + Izquierda)", fontCardDesc, BOX_X + 34, mpY + 58, COLOR_WHITE);
+    draw_text(scene, "para elegir '¿Quién está usando este mando?'.", fontCardDesc, BOX_X + 34, mpY + 82, COLOR_BLUE_BRIGHT);
+
+    // Dynamic Option Explanation Panel for DualSense
+    static const char* dsWhat[TOTAL_CARDS] = {
+        "Configura el efecto luminoso del halo LED RGB que rodea el Touchpad del mando PS5 (control directo vía reporte BT 0x31).",
+        "Selecciona el color RGB fijo empleado cuando el modo de iluminación está en Color Estático o Pulso Respiración.",
+        "Regula la intensidad luminosa del halo del Touchpad para adaptarlo a habitaciones iluminadas o juego nocturno.",
+        "Envía efectos mecánicos reales a los motores internos de los gatillos adaptativos L2 y R2 del DualSense.",
+        "Controla los 5 puntos LED blancos situados bajo el Touchpad que muestran el número de jugador activo.",
+        "Guarda el nivel de ganancia para el altavoz del mando en perfiles PS5 y permite silenciarlo rápido con [Cuadrado].",
+        "Reasigna la pulsación del botón físico de micrófono (debajo del botón PS) en el DualSense.",
+        "Elige entre el paquete Bluetooth estándar compacto (10B) o el reporte extendido completo DualSense (78B)."
+    };
+    int dsSel = (selectedCard >= 0 && selectedCard < TOTAL_CARDS) ? selectedCard : 0;
+    std::string dsEff;
+    if (dsSel == 0) {
+        static const char* lbEff[6] = {
+            "Sincronizar Juego: deja la barra en su color neutro de consola o perfil de jugador PS4.",
+            "Color Estático: fija de forma permanente el color RGB elegido abajo sin que el menú ni los juegos lo quiten.",
+            "Estado Batería: la barra cambia de verde (>60%) a ámbar y rojo (<20%), o azul/verde pulsante al cargar por USB-C.",
+            "Apagado: apaga por completo el halo LED RGB del DualSense para ahorrar batería y evitar reflejos.",
+            "Arcoíris Dinámico: el halo del DualSense recorre suavemente todo el espectro de colores RGB en vivo.",
+            "Pulso Respiración: enciende y atenúa de forma continua el color fijo que tengas seleccionado."
+        };
+        int mi = (cfg.ds_lightbar_mode >= 0 && cfg.ds_lightbar_mode < 6) ? cfg.ds_lightbar_mode : 0;
+        dsEff = lbEff[mi];
+    } else if (dsSel == 1) {
+        dsEff = std::string("Color seleccionado: ") + cardValues[1] + " (al cambiar color activa Color Estático automáticamente y permanece al salir).";
+    } else if (dsSel == 2) {
+        static const char* brEff[3] = {
+            "Alto (100%): máxima intensidad del halo RGB y de las luces del mando.",
+            "Medio (50%): reduce el brillo a la mitad para equilibrar visibilidad y consumo.",
+            "Bajo (25%): luz suave discreta ideal para jugar a oscuras sin cansar la vista."
+        };
+        int bi = (cfg.ds_brightness >= 0 && cfg.ds_brightness < 3) ? cfg.ds_brightness : 0;
+        dsEff = brEff[bi];
+    } else if (dsSel == 3) {
+        static const char* trEff[4] = {
+            "Estándar / Off: gatillos libres sin resistencia mecánica añadida.",
+            "Disparo Rápido (Click): añade un tope seco tipo ratón en L2/R2 para disparar rápido en FPS.",
+            "Resistencia Continua: ofrece dureza progresiva constante en L2/R2, ideal para frenar o acelerar en conducción.",
+            "Vibración / Pulso: hace vibrar mecánicamente los propios gatillos cada vez que los pulsas."
+        };
+        int ti = (cfg.ds_trigger_mode >= 0 && cfg.ds_trigger_mode < 4) ? cfg.ds_trigger_mode : 0;
+        dsEff = trEff[ti];
+    } else if (dsSel == 4) {
+        static const char* plEff[3] = {
+            "Ranura Jugador: ilumina el patrón de LEDs blancos acorde al Jugador 1, 2, 3 o 4 en consola.",
+            "Todos Encendidos: mantiene activos los 5 LEDs blancos inferiores simultáneamente.",
+            "Apagados: apaga todos los LEDs blancos indicadores bajo el Touchpad."
+        };
+        int pi = (cfg.ds_player_leds >= 0 && cfg.ds_player_leds < 3) ? cfg.ds_player_leds : 0;
+        dsEff = plEff[pi];
+    } else if (dsSel == 5) {
+        char vBuf[192];
+        snprintf(vBuf, sizeof(vBuf), "Volumen al %s (Bluetooth PS4 dirige el audio del juego a la TV; [Cuadrado] alterna silencio 0%%).",
+                 cardValues[5].c_str());
+        dsEff = vBuf;
+    } else if (dsSel == 6) {
+        dsEff = (cfg.ds_mute_action == 1)
+            ? "Clic Touchpad: pulsar el botón físico de micrófono ejecuta al instante el Clic del Panel Táctil en PS4."
+            : "Por Defecto: conserva la función estándar de silenciar o reactivar el micrófono del DualSense.";
+    } else {
+        dsEff = (cfg.ds_bt_mode == 1)
+            ? "Modo Extendido (78B): desbloquea RGB completo, gatillos adaptativos, giroscopio, touchpad y batería real (recomendado)."
+            : "Modo Seguro (10B): reporte básico de compatibilidad; no permite RGB personalizado ni gatillos adaptativos.";
+    }
+    draw_option_guide_box(scene, cardTitles[dsSel], dsWhat[dsSel], dsEff.c_str(), COLOR_BLUE_MAIN);
 
     // Footer
     scene->DrawRectangle(56, 865, 1808, 2, COLOR_DIVIDER);
@@ -1756,12 +1904,12 @@ void UI::render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard
 
 void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCard, const OrbisPadData& padData, const TesterState& tester) {
     // Top Exclusive Banner for Native PS4 DualShock 4
-    draw_rounded_rect(scene, 410, 145, 1440, 110, 12, Color{ 16, 22, 44 });
-    draw_rounded_outline(scene, 410, 145, 1440, 110, 12, COLOR_ACCENT_INDIGO, 1);
-    draw_rounded_rect(scene, 410, 145, 6, 110, 3, COLOR_ACCENT_INDIGO);
-    draw_image(scene, iconRumble, 436, 175);
-    draw_text(scene, "Configurador Nativo DualShock 4 (Mandos Originales PS4 CUH-ZCT1 / ZCT2)", fontCardTitle, 496, 190, COLOR_WHITE);
-    draw_text(scene, "Personaliza al instante la barra de luz frontal del mando PS4, brillo de ahorro de batería, motores de vibración y giroscopio.", fontCardDesc, 496, 222, COLOR_BLUE_BRIGHT);
+    draw_rounded_rect(scene, 410, 145, 1440, 104, 12, Color{ 16, 22, 44 });
+    draw_rounded_outline(scene, 410, 145, 1440, 104, 12, COLOR_ACCENT_INDIGO, 1);
+    draw_rounded_rect(scene, 410, 145, 6, 104, 3, COLOR_ACCENT_INDIGO);
+    draw_image(scene, iconRumble, 436, 173);
+    draw_text(scene, "Configurador Nativo DualShock 4 (Mandos Originales PS4 CUH-ZCT1 / ZCT2)", fontCardTitle, 496, 188, COLOR_WHITE);
+    draw_text(scene, "Personaliza la barra de luz frontal del mando PS4, brillo de ahorro de batería, motores de vibración y giroscopio.", fontCardDesc, 496, 220, COLOR_BLUE_BRIGHT);
 
     const int TOTAL_CARDS = 6;
     const int VISIBLE_CARDS = 5;
@@ -1838,14 +1986,14 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
 
     const int DS4_CARD_X = 410;
     const int DS4_CARD_W = 880;
-    const int DS4_CARD_H = 96;
-    const int DS4_CARD_SPACING = 14;
+    const int DS4_CARD_H = 82;
+    const int DS4_CARD_SPACING = 8;
 
     for (int i = 0; i < VISIBLE_CARDS; i++) {
         int cardIdx = i + scrollOffset;
         if (cardIdx >= TOTAL_CARDS) break;
 
-        int cardY = 280 + i * (DS4_CARD_H + DS4_CARD_SPACING);
+        int cardY = 264 + i * (DS4_CARD_H + DS4_CARD_SPACING);
         bool isSelected = (cardIdx == selectedCard);
 
         draw_rounded_rect(scene, DS4_CARD_X, cardY, DS4_CARD_W, DS4_CARD_H, 12, isSelected ? Color{ 18, 28, 56 } : COLOR_CARD_BG);
@@ -1853,56 +2001,63 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
         if (isSelected) {
             draw_rounded_outline(scene, DS4_CARD_X - 1, cardY - 1, DS4_CARD_W + 2, DS4_CARD_H + 2, 12, COLOR_ACCENT_INDIGO, 2);
             draw_rounded_outline(scene, DS4_CARD_X, cardY, DS4_CARD_W, DS4_CARD_H, 12, COLOR_BLUE_BRIGHT, 2);
-            draw_rounded_rect(scene, DS4_CARD_X, cardY + 14, 5, DS4_CARD_H - 28, 2, COLOR_BLUE_BRIGHT);
+            draw_rounded_rect(scene, DS4_CARD_X, cardY + 12, 5, DS4_CARD_H - 24, 2, COLOR_BLUE_BRIGHT);
         } else {
             draw_rounded_outline(scene, DS4_CARD_X, cardY, DS4_CARD_W, DS4_CARD_H, 12, COLOR_CARD_BORDER, 1);
         }
 
         if (cardIcons[cardIdx]) {
-            draw_image(scene, *cardIcons[cardIdx], DS4_CARD_X + 20, cardY + 24);
+            draw_image(scene, *cardIcons[cardIdx], DS4_CARD_X + 20, cardY + 17);
         }
 
-        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS4_CARD_X + 80, cardY + 38, COLOR_WHITE);
-        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS4_CARD_X + 80, cardY + 70, COLOR_TEXT_DIM);
+        draw_text(scene, cardTitles[cardIdx], fontCardTitle, DS4_CARD_X + 80, cardY + 33, COLOR_WHITE);
+        draw_text(scene, cardDescs[cardIdx], fontCardDesc, DS4_CARD_X + 80, cardY + 61, COLOR_TEXT_DIM);
 
         int vBoxW = 290;
-        int vBoxH = 48;
+        int vBoxH = 44;
         int vBoxX = DS4_CARD_X + DS4_CARD_W - vBoxW - 18;
         int vBoxY = cardY + (DS4_CARD_H - vBoxH) / 2;
         draw_rounded_rect(scene, vBoxX, vBoxY, vBoxW, vBoxH, 8, isSelected ? Color{ 10, 22, 42 } : Color{ 8, 13, 24 });
         draw_rounded_outline(scene, vBoxX, vBoxY, vBoxW, vBoxH, 8, isSelected ? COLOR_BLUE_BRIGHT : COLOR_BORDER_DIM, 1);
 
         if (isSelected) {
-            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 54, COLOR_BLUE_BRIGHT);
-            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 54, COLOR_BLUE_BRIGHT);
+            draw_text(scene, "<", fontValue, vBoxX + 12, cardY + 49, COLOR_BLUE_BRIGHT);
+            draw_text(scene, ">", fontValue, vBoxX + vBoxW - 24, cardY + 49, COLOR_BLUE_BRIGHT);
         }
 
         if (cardIdx == 1) {
             int c_idx = cfg.ds4_lightbar_color;
             if (c_idx >= 0 && c_idx < 7) {
-                draw_circle(scene, vBoxX + 36, cardY + 48, 8, ds4Colors[c_idx]);
-                draw_circle_outline(scene, vBoxX + 36, cardY + 48, 8, COLOR_WHITE, 1);
+                draw_circle(scene, vBoxX + 36, cardY + 41, 8, ds4Colors[c_idx]);
+                draw_circle_outline(scene, vBoxX + 36, cardY + 41, 8, COLOR_WHITE, 1);
             }
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 54, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2 + 8, cardY + 49, COLOR_WHITE);
         } else {
-            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 54, COLOR_WHITE);
+            draw_text_centered(scene, cardValues[cardIdx], fontValue, vBoxX + vBoxW / 2, cardY + 49, COLOR_WHITE);
         }
+    }
+
+    if (scrollOffset > 0) {
+        draw_text(scene, "^", fontCardTitle, DS4_CARD_X + DS4_CARD_W / 2, 260, COLOR_BLUE_BRIGHT);
+    }
+    if (scrollOffset + VISIBLE_CARDS < TOTAL_CARDS) {
+        draw_text(scene, "v", fontCardTitle, DS4_CARD_X + DS4_CARD_W / 2, 724, COLOR_BLUE_BRIGHT);
     }
 
     // Right-Hand Native DualShock 4 Live Preview & Status Panel
     const int BOX_X = 1310;
-    const int BOX_Y = 280;
+    const int BOX_Y = 264;
     const int BOX_W = 540;
-    const int BOX_H = 536;
+    const int BOX_H = 442;
 
     draw_rounded_rect(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BG);
     draw_rounded_outline(scene, BOX_X, BOX_Y, BOX_W, BOX_H, 12, COLOR_CARD_BORDER, 1);
 
-    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 22);
-    draw_text(scene, "Estado DualShock 4 Nativo", fontCardTitle, BOX_X + 76, BOX_Y + 40, COLOR_WHITE);
-    draw_text(scene, "Control Directo vía libScePad (API Oficial PS4)", fontCardDesc, BOX_X + 76, BOX_Y + 62, COLOR_BLUE_BRIGHT);
+    draw_image(scene, btnPs, BOX_X + 24, BOX_Y + 14);
+    draw_text(scene, "Estado DualShock 4 Nativo", fontCardTitle, BOX_X + 76, BOX_Y + 34, COLOR_WHITE);
+    draw_text(scene, "Control Persistente vía Demonio + libScePad", fontCardDesc, BOX_X + 76, BOX_Y + 54, COLOR_BLUE_BRIGHT);
 
-    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 76, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
+    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 66, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
 
     // Visual Lightbar Prism Preview
     int activeColorIdx = (cfg.ds4_lightbar_color >= 0 && cfg.ds4_lightbar_color < 7) ? cfg.ds4_lightbar_color : 0;
@@ -1950,34 +2105,34 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
         }
     }
 
-    draw_text(scene, "Vista Previa de Barra de Luz Frontal:", fontCardTitle, BOX_X + 30, BOX_Y + 112, COLOR_WHITE);
-    draw_rounded_rect(scene, BOX_X + 30, BOX_Y + 128, BOX_W - 60, 34, 10, activeLed);
-    draw_rounded_outline(scene, BOX_X + 30, BOX_Y + 128, BOX_W - 60, 34, 10, COLOR_WHITE, 1);
+    draw_text(scene, "Vista Previa Barra de Luz Frontal:", fontCardTitle, BOX_X + 30, BOX_Y + 92, COLOR_WHITE);
+    draw_rounded_rect(scene, BOX_X + 30, BOX_Y + 104, BOX_W - 60, 26, 8, activeLed);
+    draw_rounded_outline(scene, BOX_X + 30, BOX_Y + 104, BOX_W - 60, 26, 8, COLOR_WHITE, 1);
     if (cfg.ds4_lightbar_mode == 3) {
-        draw_text_centered(scene, "LED APAGADO (0% Brillo - Ahorro Total)", fontCardDesc, BOX_X + BOX_W / 2, BOX_Y + 151, COLOR_TEXT_DIM);
+        draw_text_centered(scene, "LED APAGADO (0% Brillo - Ahorro Total)", fontCardDesc, BOX_X + BOX_W / 2, BOX_Y + 123, COLOR_TEXT_DIM);
     }
 
     // Active Slots Status
-    draw_text(scene, "Mandos PS4 Detectados en Consola:", fontCardTitle, BOX_X + 30, BOX_Y + 202, COLOR_WHITE);
+    draw_text(scene, "Mandos PS4 Detectados en Consola:", fontCardTitle, BOX_X + 30, BOX_Y + 154, COLOR_WHITE);
     for (int s = 0; s < 4; s++) {
-        int sy = BOX_Y + 220 + s * 42;
+        int sy = BOX_Y + 166 + s * 34;
         bool conn = tester.slotConnected[s];
-        draw_rounded_rect(scene, BOX_X + 30, sy, BOX_W - 60, 34, 6, conn ? Color{ 14, 32, 54 } : Color{ 10, 16, 26 });
-        draw_circle(scene, BOX_X + 50, sy + 17, 5, conn ? Color{ 0, 240, 140 } : Color{ 90, 100, 115 });
+        draw_rounded_rect(scene, BOX_X + 30, sy, BOX_W - 60, 28, 6, conn ? Color{ 14, 32, 54 } : Color{ 10, 16, 26 });
+        draw_circle(scene, BOX_X + 50, sy + 14, 5, conn ? Color{ 0, 240, 140 } : Color{ 90, 100, 115 });
         char slotTxt[96];
         snprintf(slotTxt, sizeof(slotTxt), "Jugador %d (Ranura %d): %s", s + 1, s + 1, conn ? "DualShock 4 Activo" : "Sin conexión");
-        draw_text(scene, slotTxt, fontCardDesc, BOX_X + 68, sy + 23, conn ? COLOR_WHITE : COLOR_TEXT_DIM);
+        draw_text(scene, slotTxt, fontCardDesc, BOX_X + 68, sy + 20, conn ? COLOR_WHITE : COLOR_TEXT_DIM);
     }
 
     // Live Analog, Touchpad & D-Pad Telemetry Mini-Readout
-    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 402, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
-    draw_text(scene, "Lectura Instantánea del Mando Activo:", fontCardTitle, BOX_X + 30, BOX_Y + 430, COLOR_WHITE);
+    draw_rounded_rect(scene, BOX_X + 24, BOX_Y + 308, BOX_W - 48, 1, 0, COLOR_CARD_BORDER);
+    draw_text(scene, "Lectura Instantánea del Mando Activo:", fontCardTitle, BOX_X + 30, BOX_Y + 334, COLOR_WHITE);
     char stickInfo[160];
     snprintf(stickInfo, sizeof(stickInfo), "L3:(%d,%d) R3:(%d,%d) | L2:%d R2:%d",
              (int)padData.leftStick.x, (int)padData.leftStick.y,
              (int)padData.rightStick.x, (int)padData.rightStick.y,
              (int)padData.analogButtons.l2, (int)padData.analogButtons.r2);
-    draw_text(scene, stickInfo, fontCardDesc, BOX_X + 30, BOX_Y + 458, COLOR_BLUE_BRIGHT);
+    draw_text(scene, stickInfo, fontCardDesc, BOX_X + 30, BOX_Y + 362, COLOR_BLUE_BRIGHT);
 
     bool tpClick = (padData.buttons & ORBIS_PAD_BUTTON_TOUCH_PAD) != 0;
     bool anyDpad = (padData.buttons & (ORBIS_PAD_BUTTON_UP | ORBIS_PAD_BUTTON_DOWN | ORBIS_PAD_BUTTON_LEFT | ORBIS_PAD_BUTTON_RIGHT)) != 0;
@@ -1987,8 +2142,64 @@ void UI::render_dualshock4(Scene2D* scene, const AppConfig& cfg, int selectedCar
              (int)padData.touch.fingers,
              (int)padData.touch.touch[0].x, (int)padData.touch.touch[0].y,
              anyDpad ? "PULSADA" : "Reposo");
-    draw_text(scene, tpInfo, fontCardDesc, BOX_X + 30, BOX_Y + 484, (tpClick || anyDpad) ? Color{ 0, 255, 160 } : COLOR_WHITE);
-    draw_text(scene, "Pulsa [CUADRADO] para probar la vibración del DualShock 4.", fontCardDesc, BOX_X + 30, BOX_Y + 510, Color{ 0, 255, 160 });
+    draw_text(scene, tpInfo, fontCardDesc, BOX_X + 30, BOX_Y + 388, (tpClick || anyDpad) ? Color{ 0, 255, 160 } : COLOR_WHITE);
+    draw_text(scene, "Pulsa [CUADRADO] para probar la vibración del DS4.", fontCardDesc, BOX_X + 30, BOX_Y + 418, Color{ 0, 255, 160 });
+
+    // Dynamic Option Explanation Panel for DualShock 4
+    static const char* ds4What[TOTAL_CARDS] = {
+        "Define cómo controla el demonio la barra de luz frontal del DualShock 4 tanto en la consola como en juegos.",
+        "Elige el tono RGB específico que mostrará la barra luminosa cuando uses Color Personalizado o Respiración.",
+        "Ajusta la potencia de brillo por hardware del LED del DualShock 4 para jugar de noche y ahorrar batería.",
+        "Regula la intensidad de los motores de vibración izquierdo/derecho en juegos y pruebas de hardware.",
+        "Configura cómo responde el panel táctil central del DualShock 4: deslizamientos táctiles o solo pulsación física.",
+        "Suaviza las micro-vibraciones del sensor de movimiento Sixaxis (giroscopio y acelerómetro)."
+    };
+    int ds4Sel = (selectedCard >= 0 && selectedCard < TOTAL_CARDS) ? selectedCard : 0;
+    std::string ds4Eff;
+    if (ds4Sel == 0) {
+        static const char* mEff[6] = {
+            "Control del Juego: el sistema PS4 y cada juego deciden libremente el color del LED (azul P1, rojo P2, etc.).",
+            "Color Personalizado: el demonio fija tu color elegido abajo y lo mantiene activo al salir al menú o jugar.",
+            "Nivel de Batería: la barra muestra verde (>60%), ámbar (21-60%) o rojo (<20%) según la carga restante.",
+            "Apagado (Ahorro): apaga el LED frontal (0% brillo) para eliminar reflejos en el televisor y ahorrar batería.",
+            "Arcoíris Dinámico: cambia progresivamente por todo el espectro RGB mientras usas la consola.",
+            "Pulso Respiración: enciende y atenúa de forma suave y constante el color elegido abajo."
+        };
+        int mi = (cfg.ds4_lightbar_mode >= 0 && cfg.ds4_lightbar_mode < 6) ? cfg.ds4_lightbar_mode : 0;
+        ds4Eff = mEff[mi];
+    } else if (ds4Sel == 1) {
+        ds4Eff = std::string("Color seleccionado: ") + cardValues[1] + " (el demonio mantiene este color fijo en segundo plano al salir).";
+    } else if (ds4Sel == 2) {
+        static const char* bEff[3] = {
+            "Alto (100%): brillo completo estándar de Sony en la barra LED del DualShock 4.",
+            "Medio (50%): atenúa la intensidad por hardware a la mitad para mayor comodidad visual.",
+            "Tenue (15%): brillo mínimo discreto ideal en habitaciones oscuras y máximo ahorro energético."
+        };
+        int bi = (cfg.ds4_brightness >= 0 && cfg.ds4_brightness < 3) ? cfg.ds4_brightness : 0;
+        ds4Eff = bEff[bi];
+    } else if (ds4Sel == 3) {
+        static const char* rEff[4] = {
+            "Estándar (100%): fuerza de vibración original sin recortes ni amplificación.",
+            "Suave (60%): reduce la potencia de los motores al 60% para vibración más discreta y ligera.",
+            "Intenso (120%): potencia los golpes suaves hasta un 120% para sentir cada impacto con más fuerza.",
+            "Desactivado: apaga por completo los motores de vibración del DualShock 4 (pulsa [Cuadrado] para probar)."
+        };
+        int ri = (cfg.ds4_rumble_boost >= 0 && cfg.ds4_rumble_boost < 4) ? cfg.ds4_rumble_boost : 0;
+        ds4Eff = rEff[ri];
+    } else if (ds4Sel == 4) {
+        ds4Eff = (cfg.ds4_touchpad_mode == 1)
+            ? "Solo Clic Físico: ignora rozamientos capacitivos y únicamente registra al presionar clic del panel."
+            : "Táctil + Clic Completo: permite deslizamientos, gestos multi-dedo y pulsación del panel táctil.";
+    } else {
+        static const char* gEff[3] = {
+            "Alta Precisión: lectura directa sin filtrado del giroscopio para apuntado por movimiento.",
+            "Filtro Estabilizador: suaviza pequeñas vibraciones de mano en menús o cámara por movimiento.",
+            "Filtro Intenso: recorta oscilaciones de sensor para estabilizar mandos con giroscopio nervioso."
+        };
+        int gi = (cfg.ds4_gyro_deadband >= 0 && cfg.ds4_gyro_deadband < 3) ? cfg.ds4_gyro_deadband : 0;
+        ds4Eff = gEff[gi];
+    }
+    draw_option_guide_box(scene, cardTitles[ds4Sel], ds4What[ds4Sel], ds4Eff.c_str(), COLOR_ACCENT_INDIGO);
 
     // Footer
     scene->DrawRectangle(56, 865, 1808, 2, COLOR_DIVIDER);

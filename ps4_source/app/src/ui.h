@@ -117,6 +117,7 @@ private:
     void draw_btn_badge(Scene2D* scene, int x, int y, int w, int h, const char* label, bool pressed);
     void draw_text(Scene2D* scene, const std::string& text, FT_Face face, int startX, int baselineY, Color color);
     void draw_text_centered(Scene2D* scene, const std::string& text, FT_Face face, int centerX, int baselineY, Color color);
+    void draw_option_guide_box(Scene2D* scene, const char* optionTitle, const char* whatItDoes, const char* currentValEffect, Color accentColor);
 
     void render_tester(Scene2D* scene, const AppConfig& cfg, const OrbisPadData& padData, const TesterState& tester);
     void render_dualsense(Scene2D* scene, const AppConfig& cfg, int selectedCard, const HidStatus& status);

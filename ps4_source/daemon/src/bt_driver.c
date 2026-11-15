@@ -1680,7 +1680,7 @@ void bt_driver_poll_step(void) {
         if (dev->capacity_patched && now_us >= dev->next_output_retry_us) {
             bool dynamic_rgb = (g_daemon_config.dualsense_lightbar_mode == 4 ||
                                 g_daemon_config.dualsense_lightbar_mode == 5);
-            uint64_t interval = (!dev->initialized_output || !dev->led_synced) ? 50000ULL : (dynamic_rgb ? 80000ULL : 2000000ULL);
+            uint64_t interval = (!dev->initialized_output || !dev->led_synced) ? 50000ULL : (dynamic_rgb ? 80000ULL : 800000ULL);
             if (now_us - dev->last_output_time >= interval) {
                 bt_send_rumble_dev(dev, dev->last_rumble_lg, dev->last_rumble_sm, dev->last_color);
             }
@@ -1931,7 +1931,7 @@ static void bt_send_rumble_dev(BtDevice* dev, uint8_t large, uint8_t small, cons
     if (dev->output_unsupported || !dev->capacity_patched) return;
 
     uint64_t now_out = daemon_sys_time_us();
-    if (now_out < dev->next_output_retry_us && (large > 0 || small > 0)) {
+    if (now_out < dev->next_output_retry_us) {
         return;
     }
 
@@ -2119,10 +2119,12 @@ static void bt_send_rumble_dev(BtDevice* dev, uint8_t large, uint8_t small, cons
         // BT HCI TX busy: back off 150ms to prevent input micro-stuttering
         dev->next_output_retry_us = now_out + 150000ULL;
     } else {
-        if (++dev->output_errors >= 3) {
-            dev->output_unsupported = true;
-            daemon_log(LOG_LEVEL_WARN, "DualSense BT (0x%llX): disabling output reports after error 0x%lX",
-                       (unsigned long long)dev->address, rc);
+        dev->output_errors++;
+        uint64_t delay_us = (dev->output_errors >= 5) ? 2000000ULL : 250000ULL;
+        dev->next_output_retry_us = now_out + delay_us;
+        if (dev->output_errors <= 3 || (dev->output_errors % 20) == 0) {
+            daemon_log(LOG_LEVEL_WARN, "DualSense BT (0x%llX): transient output error 0x%lX (retry #%d in %llums)",
+                       (unsigned long long)dev->address, rc, dev->output_errors, (unsigned long long)(delay_us / 1000ULL));
         }
     }
 }
