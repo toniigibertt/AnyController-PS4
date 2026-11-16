@@ -8,11 +8,11 @@
 
 #define ONEFAMILY_VERSION_MAJOR     1
 #define ONEFAMILY_VERSION_MINOR     5
-#define ONEFAMILY_VERSION_PATCH     2
-#define ONEFAMILY_VERSION_RAW       "1.5.2"
-#define ONEFAMILY_VERSION_STRING    "v1.5.2"
-#define ONEFAMILY_VERSION_SFO       "01.52"
+#define ONEFAMILY_VERSION_PATCH     3
+#define ONEFAMILY_VERSION_RAW       "1.5.3"
+#define ONEFAMILY_VERSION_STRING    "v1.5.3"
+#define ONEFAMILY_VERSION_SFO       "01.53"
 #define ONEFAMILY_VERSION_TITLE     "Controller Control Center PS4 - DualSense y DualShock 4"
-#define ONEFAMILY_VERSION_FULL      "v1.5.2 (Controller Control Center PS4)"
+#define ONEFAMILY_VERSION_FULL      "v1.5.3 (Controller Control Center PS4)"
 
 #endif // ONEFAMILY_VERSION_H

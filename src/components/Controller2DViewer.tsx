@@ -1,5 +1,5 @@
 /**
- * Controller Control Center PS4 - Visor Interactivo Original 2D en Tiempo Real (v1.5.2)
+ * Controller Control Center PS4 - Visor Interactivo Original 2D en Tiempo Real (v1.5.3)
  * Siluetas originales de alta fidelidad de Sony PS5 DualSense y PS4 DualShock 4
  * con barra superior L2/L1/R1/R2, barra LED animada y respuesta lumínica al pulsar o hacer clic.
  */

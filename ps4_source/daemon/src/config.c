@@ -263,6 +263,8 @@ void daemon_config_load(DaemonConfig *cfg) {
 void daemon_config_load_device(DaemonConfig *cfg, const char *device_ini_filename) {
     if (!cfg) return;
 
+    static char buf[ONEFAMILY_CONFIG_BUFFER_SIZE];
+
     // 1. Start from current global configuration defaults
     daemon_config_init_defaults(cfg);
     int gfd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH, O_RDONLY, 0);
@@ -270,12 +272,11 @@ void daemon_config_load_device(DaemonConfig *cfg, const char *device_ini_filenam
         gfd = daemon_sys_open(ANYCONTROLLER_CONFIG_PATH_USER, O_RDONLY, 0);
     }
     if (gfd >= 0) {
-        char gbuf[ONEFAMILY_CONFIG_BUFFER_SIZE];
-        memset(gbuf, 0, sizeof(gbuf));
-        int gr = daemon_sys_read(gfd, gbuf, sizeof(gbuf) - 1);
+        memset(buf, 0, sizeof(buf));
+        int gr = daemon_sys_read(gfd, buf, sizeof(buf) - 1);
         daemon_sys_close(gfd);
         if (gr > 0) {
-            daemon_config_parse_buffer(cfg, gbuf);
+            daemon_config_parse_buffer(cfg, buf);
         }
     }
 
@@ -290,12 +291,11 @@ void daemon_config_load_device(DaemonConfig *cfg, const char *device_ini_filenam
         dfd = daemon_sys_open(path, O_RDONLY, 0);
     }
     if (dfd >= 0) {
-        char dbuf[ONEFAMILY_CONFIG_BUFFER_SIZE];
-        memset(dbuf, 0, sizeof(dbuf));
-        int dr = daemon_sys_read(dfd, dbuf, sizeof(dbuf) - 1);
+        memset(buf, 0, sizeof(buf));
+        int dr = daemon_sys_read(dfd, buf, sizeof(buf) - 1);
         daemon_sys_close(dfd);
         if (dr > 0) {
-            daemon_config_parse_buffer(cfg, dbuf);
+            daemon_config_parse_buffer(cfg, buf);
         }
     }
 }
