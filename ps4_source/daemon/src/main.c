@@ -37,11 +37,29 @@ static bool app_is_foreground(void) {
         "/data/anycontroller/app_foreground",
         "/user/data/anycontroller/app_foreground"
     };
+    uint64_t now_sec = daemon_sys_time_us() / 1000000ULL;
     for (int i = 0; i < 2; i++) {
         int fd = daemon_sys_open(fg_paths[i], 0 /* O_RDONLY */, 0);
         if (fd >= 0) {
+            char buf[32];
+            memset(buf, 0, sizeof(buf));
+            int rd = daemon_sys_read(fd, buf, sizeof(buf) - 1);
             daemon_sys_close(fd);
-            return true;
+            if (rd > 0) {
+                uint64_t app_sec = 0;
+                bool has_digit = false;
+                for (int k = 0; k < rd; k++) {
+                    if (buf[k] >= '0' && buf[k] <= '9') {
+                        has_digit = true;
+                        app_sec = app_sec * 10ULL + (uint64_t)(buf[k] - '0');
+                    } else if (has_digit) {
+                        break;
+                    }
+                }
+                if (has_digit && app_sec > 0 && now_sec <= app_sec + 4ULL && app_sec <= now_sec + 60ULL) {
+                    return true;
+                }
+            }
         }
     }
     return false;
@@ -130,6 +148,10 @@ int main(int argc, char *argv[]) {
     daemon_sys_unlink("/user/data/onefamily/onefamily.log");
     daemon_sys_unlink("/data/onefamily/onefamily.reload");
     daemon_sys_unlink("/user/data/onefamily/onefamily.reload");
+    daemon_sys_unlink("/data/anycontroller/app_foreground");
+    daemon_sys_unlink("/user/data/anycontroller/app_foreground");
+    daemon_sys_unlink("/data/anycontroller/ds4_disconnect.req");
+    daemon_sys_unlink("/user/data/anycontroller/ds4_disconnect.req");
 
     // 2. Load user configuration from /data/anycontroller/anycontroller.ini & per-slot DS4 configs
     daemon_config_load(&g_daemon_config);

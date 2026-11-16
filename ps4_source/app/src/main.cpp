@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 #include <orbis/libkernel.h>
 #include <orbis/Pad.h>
 #include <orbis/UserService.h>
@@ -127,10 +128,20 @@ static void set_app_foreground_marker(bool active) {
         mkdir("/user", 0777);
         mkdir("/user/data", 0777);
         mkdir("/user/data/anycontroller", 0777);
+        struct timespec ts;
+        memset(&ts, 0, sizeof(ts));
+        uint64_t now_sec = 1ULL;
+        if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0 && ts.tv_sec > 0) {
+            now_sec = (uint64_t)ts.tv_sec;
+        }
+        char buf[32];
+        int n = snprintf(buf, sizeof(buf), "%llu\n", (unsigned long long)now_sec);
         for (int i = 0; i < 2; i++) {
             int fd = sceKernelOpen(fg_paths[i], O_WRONLY | O_CREAT | O_TRUNC, 0666);
             if (fd >= 0) {
-                sceKernelWrite(fd, "1\n", 2);
+                if (n > 0) {
+                    sceKernelWrite(fd, buf, (size_t)n);
+                }
                 sceKernelClose(fd);
             }
         }
@@ -169,6 +180,7 @@ static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots
     static sceUserServiceSetVibrationEnabled_t s_userSetVibEn = NULL;
     static int s_last_base_br[4] = { -1, -1, -1, -1 };
     static int s_last_vib_en[4] = { -1, -1, -1, -1 };
+    static int s_err_cnt[4] = { 0, 0, 0, 0 };
     if (!s_resolved) {
         s_resolved = true;
         int padMod = sceKernelLoadStartModule("libScePad.sprx", 0, NULL, 0, NULL, NULL);
@@ -200,11 +212,13 @@ static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots
     for (int i = 0; i < 4; i++) {
         if (padHandles[i] < 0) {
             s_last_base_br[i] = -1;
+            s_err_cnt[i] = 0;
             continue;
         }
 
         // El halo RGB del DualSense PS5 en esta ranura lo controla directamente el demonio via reporte BT 0x31
         if (btClaimedSlots && btClaimedSlots[i]) {
+            s_err_cnt[i] = 0;
             continue;
         }
 
@@ -226,72 +240,86 @@ static void apply_live_pad_lightbar(int padHandles[4], const bool btClaimedSlots
             s_padSetBaseBr(padHandles[i], hw_base_br);
         }
 
+        int apply_rc = 0;
         if (cfg.ds4_lightbar_mode == 0 && br == 0) {
-            scePadResetLightBar(padHandles[i]);
-            continue;
-        }
-        // CRITICAL: Sony's libScePad requires the 4th byte (reserve[0]) of OrbisPadColor to be 0!
-        OrbisPadColor col = { 0, 0, 0, 0 };
-        int idx = cfg.ds4_lightbar_color;
-        if (idx < 0 || idx > 6) idx = 0;
-
-        if (cfg.ds4_lightbar_mode == 3) {
-            // Mode 3: Sin color / Apagado Completo (0% LED)
-            col.r = 0; col.g = 0; col.b = 0; col.a = 0;
-            if (scePadSetLightBar(padHandles[i], &col) < 0) {
-                OrbisPadColor dim_off = { 1, 0, 0, 0 };
-                scePadSetLightBar(padHandles[i], &dim_off);
-            }
-            continue;
-        } else if (cfg.ds4_lightbar_mode == 0) {
-            col.r = 0; col.g = 112; col.b = 220;
-        } else if (cfg.ds4_lightbar_mode == 2) {
-            col.r = 16; col.g = 220; col.b = 110;
-        } else if (cfg.ds4_lightbar_mode == 4) {
-            // Dynamic Rainbow Cycle (~5s full spectrum)
-            uint32_t phase = (uint32_t)((now_us / 3200ULL) % 1536ULL);
-            uint32_t region = phase / 256U;
-            uint32_t rem    = phase % 256U;
-            switch (region) {
-                case 0:  col.r = 255;                col.g = (uint8_t)rem;       col.b = 0; break;
-                case 1:  col.r = (uint8_t)(255-rem); col.g = 255;                col.b = 0; break;
-                case 2:  col.r = 0;                  col.g = 255;                col.b = (uint8_t)rem; break;
-                case 3:  col.r = 0;                  col.g = (uint8_t)(255-rem); col.b = 255; break;
-                case 4:  col.r = (uint8_t)rem;       col.g = 0;                  col.b = 255; break;
-                default: col.r = 255;                col.g = 0;                  col.b = (uint8_t)(255-rem); break;
-            }
-        } else if (cfg.ds4_lightbar_mode == 5) {
-            // Breathing Pulse (~2.8s cycle)
-            uint32_t phase = (uint32_t)((now_us / 5500ULL) % 512ULL);
-            uint32_t tri = (phase < 256U) ? phase : (511U - phase);
-            uint32_t pulse_pct = 8U + (tri * 92U) / 255U;
-            col.r = (uint8_t)((ds4_colors[idx][0] * pulse_pct) / 100U);
-            col.g = (uint8_t)((ds4_colors[idx][1] * pulse_pct) / 100U);
-            col.b = (uint8_t)((ds4_colors[idx][2] * pulse_pct) / 100U);
+            apply_rc = scePadResetLightBar(padHandles[i]);
         } else {
-            col.r = ds4_colors[idx][0];
-            col.g = ds4_colors[idx][1];
-            col.b = ds4_colors[idx][2];
+            // CRITICAL: Sony's libScePad requires the 4th byte (reserve[0]) of OrbisPadColor to be 0!
+            OrbisPadColor col = { 0, 0, 0, 0 };
+            int idx = cfg.ds4_lightbar_color;
+            if (idx < 0 || idx > 6) idx = 0;
+
+            if (cfg.ds4_lightbar_mode == 3) {
+                // Mode 3: Sin color / Apagado Completo (0% LED)
+                col.r = 0; col.g = 0; col.b = 0; col.a = 0;
+                apply_rc = scePadSetLightBar(padHandles[i], &col);
+                if (apply_rc < 0) {
+                    OrbisPadColor dim_off = { 1, 0, 0, 0 };
+                    apply_rc = scePadSetLightBar(padHandles[i], &dim_off);
+                }
+            } else {
+                if (cfg.ds4_lightbar_mode == 0) {
+                    col.r = 0; col.g = 112; col.b = 220;
+                } else if (cfg.ds4_lightbar_mode == 2) {
+                    col.r = 16; col.g = 220; col.b = 110;
+                } else if (cfg.ds4_lightbar_mode == 4) {
+                    // Dynamic Rainbow Cycle (~5s full spectrum)
+                    uint32_t phase = (uint32_t)((now_us / 3200ULL) % 1536ULL);
+                    uint32_t region = phase / 256U;
+                    uint32_t rem    = phase % 256U;
+                    switch (region) {
+                        case 0:  col.r = 255;                col.g = (uint8_t)rem;       col.b = 0; break;
+                        case 1:  col.r = (uint8_t)(255-rem); col.g = 255;                col.b = 0; break;
+                        case 2:  col.r = 0;                  col.g = 255;                col.b = (uint8_t)rem; break;
+                        case 3:  col.r = 0;                  col.g = (uint8_t)(255-rem); col.b = 255; break;
+                        case 4:  col.r = (uint8_t)rem;       col.g = 0;                  col.b = 255; break;
+                        default: col.r = 255;                col.g = 0;                  col.b = (uint8_t)(255-rem); break;
+                    }
+                } else if (cfg.ds4_lightbar_mode == 5) {
+                    // Breathing Pulse (~2.8s cycle)
+                    uint32_t phase = (uint32_t)((now_us / 5500ULL) % 512ULL);
+                    uint32_t tri = (phase < 256U) ? phase : (511U - phase);
+                    uint32_t pulse_pct = 8U + (tri * 92U) / 255U;
+                    col.r = (uint8_t)((ds4_colors[idx][0] * pulse_pct) / 100U);
+                    col.g = (uint8_t)((ds4_colors[idx][1] * pulse_pct) / 100U);
+                    col.b = (uint8_t)((ds4_colors[idx][2] * pulse_pct) / 100U);
+                } else {
+                    col.r = ds4_colors[idx][0];
+                    col.g = ds4_colors[idx][1];
+                    col.b = ds4_colors[idx][2];
+                }
+
+                if (br == 1) {
+                    uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
+                    col.r = (uint8_t)((col.r * 50) / 100);
+                    col.g = (uint8_t)((col.g * 50) / 100);
+                    col.b = (uint8_t)((col.b * 50) / 100);
+                    if (orig_r > 0 && col.r == 0) col.r = 1;
+                    if (orig_g > 0 && col.g == 0) col.g = 1;
+                    if (orig_b > 0 && col.b == 0) col.b = 1;
+                } else if (br == 2) {
+                    uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
+                    col.r = (uint8_t)((col.r * 15) / 100);
+                    col.g = (uint8_t)((col.g * 15) / 100);
+                    col.b = (uint8_t)((col.b * 15) / 100);
+                    if (orig_r > 0 && col.r == 0) col.r = 2;
+                    if (orig_g > 0 && col.g == 0) col.g = 2;
+                    if (orig_b > 0 && col.b == 0) col.b = 2;
+                }
+                apply_rc = scePadSetLightBar(padHandles[i], &col);
+            }
         }
 
-        if (br == 1) {
-            uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
-            col.r = (uint8_t)((col.r * 50) / 100);
-            col.g = (uint8_t)((col.g * 50) / 100);
-            col.b = (uint8_t)((col.b * 50) / 100);
-            if (orig_r > 0 && col.r == 0) col.r = 1;
-            if (orig_g > 0 && col.g == 0) col.g = 1;
-            if (orig_b > 0 && col.b == 0) col.b = 1;
-        } else if (br == 2) {
-            uint8_t orig_r = col.r, orig_g = col.g, orig_b = col.b;
-            col.r = (uint8_t)((col.r * 15) / 100);
-            col.g = (uint8_t)((col.g * 15) / 100);
-            col.b = (uint8_t)((col.b * 15) / 100);
-            if (orig_r > 0 && col.r == 0) col.r = 2;
-            if (orig_g > 0 && col.g == 0) col.g = 2;
-            if (orig_b > 0 && col.b == 0) col.b = 2;
+        if (apply_rc < 0) {
+            if (++s_err_cnt[i] >= 3) {
+                scePadClose(padHandles[i]);
+                padHandles[i] = -1;
+                s_last_base_br[i] = -1;
+                s_err_cnt[i] = 0;
+            }
+        } else {
+            s_err_cnt[i] = 0;
         }
-        scePadSetLightBar(padHandles[i], &col);
     }
 }
 
@@ -333,6 +361,8 @@ int main() {
 
     // Purge any legacy onefamily files/directories on every launch
     Installer::cleanupLegacyOneFamily();
+    sceKernelUnlink("/data/anycontroller/ds4_disconnect.req");
+    sceKernelUnlink("/user/data/anycontroller/ds4_disconnect.req");
     set_app_foreground_marker(true);
 
     // Initialize Config Manager
@@ -420,6 +450,10 @@ int main() {
                 break;
             }
 
+            if (wizardFrames % 30 == 0) {
+                set_app_foreground_marker(true);
+            }
+
             ui->render_wizard(scene, res, wizardFrames);
 
             scene->SubmitFlip(wizardFrames);
@@ -473,25 +507,9 @@ int main() {
 
     // Main Interaction Loop
     for (;;) {
-        // Check if daemon requested physical DS4 disconnect upon PS5 DualSense connection
-        int req_fd = sceKernelOpen("/data/anycontroller/ds4_disconnect.req", O_RDONLY, 0);
-        if (req_fd >= 0) {
-            sceKernelClose(req_fd);
-            sceKernelUnlink("/data/anycontroller/ds4_disconnect.req");
-            for (int i = 0; i < 4; i++) {
-                if (padHandles[i] >= 0) {
-                    reinterpret_cast<int(*)(int)>(scePadDisconnectPort)(padHandles[i]);
-                    scePadClose(padHandles[i]);
-                    padHandles[i] = -1;
-                }
-            }
-            usleep(120000);
-            refresh_pad_handles(padHandles, userId);
-            HidProfile::read_status(hidStatus);
-        }
-
-        // Periodically refresh controller handles to support dynamic reconnects and multi-user login
+        // Refresh monotonic foreground heartbeat and controller handles periodically (~2 Hz)
         if (frameID % 30 == 0) {
+            set_app_foreground_marker(true);
             refresh_pad_handles(padHandles, userId);
         }
 
@@ -854,6 +872,98 @@ int main() {
         if (currentTabId != TAB_TESTER) {
             tester.testMode = false;
             tester.testModeHoldFrames = 0;
+        }
+
+        // Keep editing target aligned when entering DualShock 4 or DualSense tab (never overriding L3 inside the same tab)
+        static int s_prevTabId = TAB_SETTINGS;
+        if (currentTabId != s_prevTabId) {
+            s_prevTabId = currentTabId;
+            if (currentTabId == TAB_DUALSHOCK4) {
+                std::string wantId = activeTargetId;
+                int wantIdx = activeTargetIndex;
+                if (activeTargetId.rfind("ds_mac_", 0) == 0) {
+                    wantId = "";
+                    wantIdx = 0;
+                    for (size_t ti = 1; ti < targets.size(); ti++) {
+                        if (targets[ti].id.rfind("ds4_slot_", 0) == 0) {
+                            if (wantId.empty() || targets[ti].slotIndex == tester.selectedSlot) {
+                                wantId = targets[ti].id;
+                                wantIdx = (int)ti;
+                                if (targets[ti].slotIndex == tester.selectedSlot) break;
+                            }
+                        }
+                    }
+                } else if (activeTargetId.empty()) {
+                    for (size_t ti = 1; ti < targets.size(); ti++) {
+                        if (targets[ti].id.rfind("ds4_slot_", 0) == 0 && targets[ti].hasCustom) {
+                            if (wantId.empty() || targets[ti].slotIndex == tester.selectedSlot) {
+                                wantId = targets[ti].id;
+                                wantIdx = (int)ti;
+                                if (targets[ti].slotIndex == tester.selectedSlot) break;
+                            }
+                        }
+                    }
+                }
+                if (wantId != activeTargetId) {
+                    activeTargetId = wantId;
+                    activeTargetIndex = wantIdx;
+                    configMgr.loadTarget(activeTargetId);
+                    if (targets[activeTargetIndex].slotIndex >= 0) {
+                        tester.selectedSlot = targets[activeTargetIndex].slotIndex;
+                    }
+                    s_slotDs4Dirty = true;
+                    sync_slot_ds4_configs(cfg, activeTargetId, true);
+                    apply_live_pad_lightbar(padHandles, btClaimedSlots, s_slotDs4Cfgs);
+                    if (toastFrames <= 0) {
+                        toastText = activeTargetId.empty()
+                            ? "Editando: Base Global (DualShock 4)"
+                            : ("Editando: " + targets[activeTargetIndex].shortLabel);
+                        toastFrames = 150;
+                    }
+                }
+            } else if (currentTabId == TAB_DUALSENSE) {
+                std::string wantId = activeTargetId;
+                int wantIdx = activeTargetIndex;
+                if (activeTargetId.rfind("ds4_slot_", 0) == 0) {
+                    wantId = "";
+                    wantIdx = 0;
+                    for (size_t ti = 1; ti < targets.size(); ti++) {
+                        if (targets[ti].id.rfind("ds_mac_", 0) == 0) {
+                            if (wantId.empty() || targets[ti].slotIndex == tester.selectedSlot) {
+                                wantId = targets[ti].id;
+                                wantIdx = (int)ti;
+                                if (targets[ti].slotIndex == tester.selectedSlot) break;
+                            }
+                        }
+                    }
+                } else if (activeTargetId.empty()) {
+                    for (size_t ti = 1; ti < targets.size(); ti++) {
+                        if (targets[ti].id.rfind("ds_mac_", 0) == 0 && targets[ti].hasCustom) {
+                            if (wantId.empty() || targets[ti].slotIndex == tester.selectedSlot) {
+                                wantId = targets[ti].id;
+                                wantIdx = (int)ti;
+                                if (targets[ti].slotIndex == tester.selectedSlot) break;
+                            }
+                        }
+                    }
+                }
+                if (wantId != activeTargetId) {
+                    activeTargetId = wantId;
+                    activeTargetIndex = wantIdx;
+                    configMgr.loadTarget(activeTargetId);
+                    if (targets[activeTargetIndex].slotIndex >= 0) {
+                        tester.selectedSlot = targets[activeTargetIndex].slotIndex;
+                    }
+                    s_slotDs4Dirty = true;
+                    sync_slot_ds4_configs(cfg, activeTargetId, true);
+                    if (toastFrames <= 0) {
+                        toastText = activeTargetId.empty()
+                            ? "Editando: Base Global (DualSense PS5)"
+                            : ("Editando: " + targets[activeTargetIndex].shortLabel);
+                        toastFrames = 150;
+                    }
+                }
+            }
         }
 
         if (currentTabId == TAB_SETTINGS) {

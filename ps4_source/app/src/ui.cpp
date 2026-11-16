@@ -406,7 +406,7 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
     int titleW = scene->GetTextWidth("CONTROLLER CONTROL CENTER ", fontCardTitle);
     draw_text(scene, "CONTROLLER CONTROL CENTER ", fontCardTitle, 174, 100, COLOR_WHITE);
     draw_text(scene, "PS4", fontCardTitle, 174 + titleW, 100, COLOR_BLUE_BRIGHT);
-    draw_text(scene, "ANYCONTROLLER v" ONEFAMILY_VERSION_STRING " • DualSense PS5, DualShock 4 Nativo y Memoria por Mando", fontCardDesc, 174, 124, COLOR_TEXT_DIM);
+    draw_text(scene, "ANYCONTROLLER " ONEFAMILY_VERSION_STRING " • DualSense PS5, DualShock 4 Nativo y Memoria por Mando", fontCardDesc, 174, 124, COLOR_TEXT_DIM);
 
     std::string activeShort = "Global";
     if (targets && activeTargetIndex >= 0 && activeTargetIndex < (int)targets->size()) {
@@ -707,7 +707,7 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
         draw_rounded_rect(scene, CARD_X, 148, INFO_W, 116, 12, COLOR_CARD_BG);
         draw_rounded_outline(scene, CARD_X, 148, INFO_W, 116, 12, COLOR_CARD_BORDER, 1);
         draw_image(scene, iconInfo, CARD_X + 22, 164);
-        draw_text(scene, "Controller Control Center PS4 (Title ID: TONI88888 • v" ONEFAMILY_VERSION_STRING ")", fontCardTitle, CARD_X + 86, 178, COLOR_WHITE);
+        draw_text(scene, "Controller Control Center PS4 (Title ID: TONI88888 • " ONEFAMILY_VERSION_STRING ")", fontCardTitle, CARD_X + 86, 178, COLOR_WHITE);
         draw_text(scene, "Payload Demonio: ANYCONTROLLER (/data/payloads/anycontroller.bin)", fontCardDesc, CARD_X + 86, 208, COLOR_BLUE_BRIGHT);
         draw_text(scene, "Base Global: /data/anycontroller/anycontroller.ini  •  Perfiles: /data/anycontroller/controllers/*.ini", fontCardDesc, CARD_X + 86, 236, COLOR_TEXT_DIM);
 
@@ -761,7 +761,7 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
             draw_text(scene, savedMsg, fontCardDesc, CARD_X + 86, 334, COLOR_WHITE);
             draw_text(scene, "Abre Ajustes PS4 -> GoldHEN -> Package Installer para instalar.", fontCardDesc, CARD_X + 86, 362, Color{ 0, 255, 150 });
         } else if (upState == UPDATER_UP_TO_DATE) {
-            draw_text(scene, "Controller Control Center PS4 está al Día (v" ONEFAMILY_VERSION_STRING ")", fontCardTitle, CARD_X + 86, 304, COLOR_WHITE);
+            draw_text(scene, "Controller Control Center PS4 está al Día (" ONEFAMILY_VERSION_STRING ")", fontCardTitle, CARD_X + 86, 304, COLOR_WHITE);
             draw_text(scene, "Tienes la última versión instalada y verificada en GitHub Releases.", fontCardDesc, CARD_X + 86, 334, COLOR_BLUE_BRIGHT);
             draw_text(scene, "Pulsa [EQUIS (X)] cuando quieras volver a comprobar actualizaciones en línea.", fontCardDesc, CARD_X + 86, 362, COLOR_TEXT_DIM);
         } else if (upState == UPDATER_CHECKING) {
@@ -803,7 +803,7 @@ void UI::render(Scene2D* scene, const AppConfig& cfg, int currentTabId, int sele
         scene->DrawRectangle(SAFE_X, 844, SAFE_W, 2, COLOR_DIVIDER);
         draw_image(scene, iconInfo, SAFE_X, 868);
         draw_text(scene, "Sistema, Red y Acerca de", fontCardTitle, 154, 890, COLOR_WHITE);
-        draw_text(scene, "ANYCONTROLLER v" ONEFAMILY_VERSION_STRING " • github.com/toniigibertt/AnyController-PS4", fontFooter, 154, 916, COLOR_TEXT_DIM);
+        draw_text(scene, "ANYCONTROLLER " ONEFAMILY_VERSION_STRING " • github.com/toniigibertt/AnyController-PS4", fontFooter, 154, 916, COLOR_TEXT_DIM);
 
         draw_image(scene, btnCross, 995, 875);
         draw_text(scene, (upState == UPDATER_UPDATE_AVAILABLE) ? "Descargar PKG" : "Buscar Update", fontFooter, 1039, 900, Color{ 0, 255, 150 });

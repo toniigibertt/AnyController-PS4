@@ -350,8 +350,7 @@ bool daemon_config_check_reload(DaemonConfig *cfg) {
 
     vpad_reload_ds4_configs();
     if (ds4_changed) {
-        daemon_log(LOG_LEVEL_INFO, "DualShock 4 configuration changed: applying lightbar settings on the fly!");
-        vpad_apply_ds4_lightbar();
+        daemon_log(LOG_LEVEL_INFO, "DualShock 4 configuration changed: reloading slot profiles!");
         if (g_usb_state.connected && g_usb_state.type == CONTROLLER_DS4) {
             usb_driver_send_rumble(0, 0);
         }

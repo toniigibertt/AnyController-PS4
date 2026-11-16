@@ -270,7 +270,7 @@ static int format_ini_buffer(const AppConfig& config, char* out, size_t out_sz, 
 
     return snprintf(out, out_sz,
         "# ANYCONTROLLER Daemon - Archivo de Configuracion\n"
-        "# Generado por Controller Control Center PS4 (v1.5.1)\n"
+        "# Generado por Controller Control Center PS4 (v1.5.2)\n"
         "# Perfil: %s\n"
         "\n"
         "[Deadzone]\n"

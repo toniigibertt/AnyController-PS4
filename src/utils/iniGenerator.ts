@@ -1,5 +1,5 @@
 /**
- * AnyController PS4 - Generador y Analizador de Archivos de Configuración INI (v1.5.1)
+ * AnyController PS4 - Generador y Analizador de Archivos de Configuración INI (v1.5.2)
  * Compatible 1:1 con el daemon en C de PlayStation 4:
  *   - Global: /data/anycontroller/anycontroller.ini
  *   - DualSense por MAC: /data/anycontroller/controllers/ds_mac_<MACHEX>.ini
@@ -30,7 +30,7 @@ export function generateOneFamilyIni(
     : '';
 
   return `# ==============================================================================
-# ANYCONTROLLER Daemon - Archivo de Configuración del Sistema (v1.5.1)
+# ANYCONTROLLER Daemon - Archivo de Configuración del Sistema (v1.5.2)
 # Generado por Controller Control Center PS4 (Title ID: TONI88888)
 ${targetLine}# Ubicación en PS4: ${ps4Path}
 # ==============================================================================
@@ -91,7 +91,7 @@ export function generateControllerIni(profile: ControllerProfile): string {
   }
 
   return `# ==============================================================================
-# AnyController - Perfil de Mando Personalizado (v1.5.1)
+# AnyController - Perfil de Mando Personalizado (v1.5.2)
 # Archivo: /data/anycontroller/controllers/${vid}_${pid}.ini
 # ==============================================================================
 
