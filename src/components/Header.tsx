@@ -1,5 +1,5 @@
 /**
- * Controller Control Center PS4 - Encabezado y Barra de Módulos (v1.5.3)
+ * Controller Control Center PS4 - Encabezado y Barra de Módulos (v1.5.4)
  * Cumple contrato limpio de barra superior y acceso directo a los 6 módulos sin ocultar pestañas.
  */
 import { TabId } from '../types';
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { downloadBinaryFile } from '../utils/iniGenerator';
 
-const PKG_VERSION = 'v1.5.3';
+const PKG_VERSION = 'v1.5.4';
 const VERSIONED_PKG_NAME = `Controller_Control_Center_PS4_${PKG_VERSION}.pkg`;
 const VERSIONED_ZIP_NAME = `Controller_Control_Center_PS4_Pack_${PKG_VERSION}.zip`;
 
@@ -100,7 +100,7 @@ export default function Header({
                 rel="noreferrer"
                 className="text-cyan-300 hover:underline font-semibold"
               >
-                {PKG_VERSION} (01.53)
+                {PKG_VERSION} (01.54)
               </a>
               <span>·</span>
               <span>ANYCONTROLLER</span>

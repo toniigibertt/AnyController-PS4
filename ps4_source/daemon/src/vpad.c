@@ -121,6 +121,8 @@ typedef struct {
     bool ps_pulse_active;
     uint64_t ps_followup_at_us;
     bool ps_followup_pending;
+    int ps_followup_count;
+    bool suppress_poweron_ps;
     bool user_interacted;
     int slot_open_login_count;
     uint64_t last_remote_poll_us;
@@ -793,6 +795,9 @@ void vpad_reactivate_slot(int slot) {
         return;
     }
     vpad_close_cached_ds4_handles();
+    bool was_interacted = g_slots[slot].user_interacted;
+    bool was_bound = g_slots[slot].bound_to_user;
+
     if (p_scePadSetConnection) {
         int r = p_scePadSetConnection(g_slots[slot].handle, 1);
         daemon_log(LOG_LEVEL_INFO, "vpad_reactivate_slot(%d): scePadSetConnection(0x%X, 1) = 0x%08X",
@@ -815,23 +820,23 @@ void vpad_reactivate_slot(int slot) {
         g_slots[slot].last_sent_data = neutral;
         g_slots[slot].has_sent_first = true;
     }
-    g_slots[slot].open_time_us = daemon_sys_time_us();
-    g_slots[slot].user_interacted = false;
-    g_slots[slot].ps_pulse_active = false;
-    g_slots[slot].ps_followup_pending = false;
-    g_slots[slot].bound_to_user = false;
-    g_slots[slot].bound_user_id = SCE_USER_SERVICE_USER_ID_INVALID;
-    g_slots[slot].slot_open_login_count = (s_last_login_count >= 0) ? s_last_login_count : 0;
-    vpad_refresh_slot_mbus_id(slot);
 
-    if (g_daemon_config.mode != CONFIG_MODE_AUTO || slot >= 1) {
-        vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
-    }
-    if (slot == 0 || !g_slots[slot].bound_to_user) {
-        vpad_schedule_ps_pulse_slot(slot, 280000ULL, 180000ULL);
-        if (slot >= 1) {
+    if (!was_interacted && !was_bound) {
+        g_slots[slot].open_time_us = daemon_sys_time_us();
+        g_slots[slot].suppress_poweron_ps = true;
+        g_slots[slot].ps_pulse_active = false;
+        g_slots[slot].ps_followup_pending = false;
+        g_slots[slot].ps_followup_count = 0;
+        g_slots[slot].slot_open_login_count = (s_last_login_count >= 0) ? s_last_login_count : 0;
+
+        if (g_daemon_config.mode != CONFIG_MODE_AUTO || slot >= 1) {
+            vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
+        }
+        if (slot == 0 || !g_slots[slot].bound_to_user) {
+            vpad_schedule_ps_pulse_slot(slot, 150000ULL, 160000ULL);
             g_slots[slot].ps_followup_pending = true;
-            g_slots[slot].ps_followup_at_us = daemon_sys_time_us() + 2000000ULL;
+            g_slots[slot].ps_followup_count = 2;
+            g_slots[slot].ps_followup_at_us = daemon_sys_time_us() + 1500000ULL;
         }
     }
 }
@@ -1333,10 +1338,38 @@ static int vpad_ensure_subsystem(void) {
     return 0;
 }
 
+void vpad_prewarm_subsystem(void) {
+    if (vpad_ensure_subsystem() == 0) {
+        init_user_service();
+        if (p_sceUserServiceGetLoginUserIdList) {
+            SceUserServiceLoginUserIdList ulist;
+            memset(&ulist, 0, sizeof(ulist));
+            for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) {
+                ulist.userId[i] = SCE_USER_SERVICE_USER_ID_INVALID;
+            }
+            if (p_sceUserServiceGetLoginUserIdList(&ulist) == 0) {
+                int cur_logins = 0;
+                for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) {
+                    if (ulist.userId[i] != SCE_USER_SERVICE_USER_ID_INVALID &&
+                        ulist.userId[i] != 0 &&
+                        (uint32_t)ulist.userId[i] != 0xFFFFFFFFU) {
+                        cur_logins++;
+                    }
+                }
+                s_last_login_count = cur_logins;
+            }
+        }
+        daemon_sys_usleep(40000);
+        daemon_log(LOG_LEVEL_INFO, "vpad_prewarm_subsystem: Mbus/Pad/UserService ready at boot (logged_in=%d)",
+                   s_last_login_count);
+    }
+}
+
 int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
     if (vpad_ensure_subsystem() != 0) {
         return -1;
     }
+    init_user_service();
 
     // Release any daemon-cached DS4 handles before allocating a virtual DS4 device
     vpad_close_cached_ds4_handles();
@@ -1374,6 +1407,21 @@ int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
         vpad_poweroff_physical_ds4();
     }
 
+    int cur_logins = 0;
+    if (p_sceUserServiceGetLoginUserIdList) {
+        SceUserServiceLoginUserIdList ulist;
+        memset(&ulist, 0, sizeof(ulist));
+        for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) ulist.userId[i] = SCE_USER_SERVICE_USER_ID_INVALID;
+        if (p_sceUserServiceGetLoginUserIdList(&ulist) == 0) {
+            for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) {
+                if (ulist.userId[i] != SCE_USER_SERVICE_USER_ID_INVALID && ulist.userId[i] != 0 && (uint32_t)ulist.userId[i] != 0xFFFFFFFFU) {
+                    cur_logins++;
+                }
+            }
+            s_last_login_count = cur_logins;
+        }
+    }
+
     ScePadVirtualDeviceParam param;
     memset(&param, 0, sizeof(param));
     param.size = sizeof(param);
@@ -1394,8 +1442,10 @@ int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
     g_slots[slot].device_key = device_key;
     g_slots[slot].assigned_slot = slot + 1;
     g_slots[slot].open_time_us = daemon_sys_time_us();
+    g_slots[slot].suppress_poweron_ps = true;
     g_slots[slot].mbus_dev_id = 0;
     g_slots[slot].bound_user_id = SCE_USER_SERVICE_USER_ID_INVALID;
+    g_slots[slot].slot_open_login_count = cur_logins;
     snprintf(g_slots[slot].assigned_username, sizeof(g_slots[slot].assigned_username), "Jugador %d", slot + 1);
 
     g_vpad_active = true;
@@ -1403,23 +1453,6 @@ int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
 
     daemon_log(LOG_LEVEL_INFO, "Virtual DS4 Slot %d (%s, dev_key=0x%llX) registered with handle=0x%X",
                slot, source == VPAD_SOURCE_BT ? "Bluetooth" : "USB", (unsigned long long)device_key, vHandle);
-
-    init_user_service();
-    int cur_logins = 0;
-    if (p_sceUserServiceGetLoginUserIdList) {
-        SceUserServiceLoginUserIdList ulist;
-        memset(&ulist, 0, sizeof(ulist));
-        for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) ulist.userId[i] = SCE_USER_SERVICE_USER_ID_INVALID;
-        if (p_sceUserServiceGetLoginUserIdList(&ulist) == 0) {
-            for (int i = 0; i < SCE_USER_SERVICE_MAX_LOGIN_USERS; i++) {
-                if (ulist.userId[i] != SCE_USER_SERVICE_USER_ID_INVALID && ulist.userId[i] != 0 && (uint32_t)ulist.userId[i] != 0xFFFFFFFFU) {
-                    cur_logins++;
-                }
-            }
-            s_last_login_count = cur_logins;
-        }
-    }
-    g_slots[slot].slot_open_login_count = cur_logins;
 
     if (p_scePadSetConnection) {
         int r = p_scePadSetConnection(vHandle, 1);
@@ -1446,22 +1479,19 @@ int vpad_slot_open_dev(VPadSource source, uint64_t device_key, int *out_slot) {
         daemon_log(LOG_LEVEL_INFO, "Virtual DS4 Slot %d initial neutral packet -> 0x%08X", slot, ri);
     }
 
-    vpad_refresh_slot_mbus_id(slot);
-
     if (g_daemon_config.mode != CONFIG_MODE_AUTO || slot >= 1) {
         vpad_bind_user_slot(slot, g_daemon_config.mode, NULL, NULL, 0);
     } else {
         g_slots[0].bound_to_user = false;
     }
 
-    // Schedule one clean, collision-free delayed PS pulse after 280ms Mbus/BT settle
-    // (Slot >= 1 skips pulse ONLY if sceMbusBindDeviceWithUserId bound cleanly to an independent user).
-    if (slot == 0) {
-        vpad_schedule_ps_pulse_slot(slot, 280000ULL, 180000ULL);
-    } else if (!g_slots[slot].bound_to_user) {
-        vpad_schedule_ps_pulse_slot(slot, 280000ULL, 180000ULL);
+    // Trigger native PS4 "Who is using this controller?" user picker via fast 150ms delayed PS tap (160ms hold),
+    // backed by automatic follow-up retries (+1.5s and +3.3s) if the user hasn't interacted yet.
+    if (slot == 0 || !g_slots[slot].bound_to_user) {
+        vpad_schedule_ps_pulse_slot(slot, 150000ULL, 160000ULL);
         g_slots[slot].ps_followup_pending = true;
-        g_slots[slot].ps_followup_at_us = daemon_sys_time_us() + 2000000ULL;
+        g_slots[slot].ps_followup_count = 2;
+        g_slots[slot].ps_followup_at_us = daemon_sys_time_us() + 1500000ULL;
     }
 
     if (out_slot) *out_slot = slot;
@@ -1614,21 +1644,33 @@ int vpad_send_data_slot(int slot, const OrbisPadData *data) {
         s->packet_counter = 1;
     }
 
+    // Release power-on physical PS suppression only after the initial pulse has finished
+    // AND the user has physically released the PS button from turning on the DualSense.
+    if (s->suppress_poweron_ps &&
+        s->open_time_us != 0 &&
+        (now - s->open_time_us) >= 350000ULL &&
+        !s->ps_pulse_active &&
+        (data->buttons & DS4_BUTTON_PS) == 0) {
+        s->suppress_poweron_ps = false;
+    }
+
     // Ignore connect-time physical PS hold for user_interacted so it never cancels picker follow-ups
-    uint32_t interact_btns = data->buttons & ~((s->open_time_us != 0 && (now - s->open_time_us) < 600000ULL) ? DS4_BUTTON_PS : 0U);
-    if ((interact_btns != 0) ||
-        abs_diff(data->leftStick.x, 128) > 32 ||
-        abs_diff(data->leftStick.y, 128) > 32) {
+    uint32_t interact_btns = data->buttons & ~((s->suppress_poweron_ps || (s->open_time_us != 0 && (now - s->open_time_us) < 600000ULL)) ? DS4_BUTTON_PS : 0U);
+    bool stick_moved_after_settle = (s->open_time_us != 0 && (now - s->open_time_us) >= 500000ULL) &&
+                                    (abs_diff(data->leftStick.x, 128) > 45 || abs_diff(data->leftStick.y, 128) > 45);
+    if ((interact_btns != 0) || stick_moved_after_settle) {
         s->user_interacted = true;
         if (s->ps_followup_pending) {
             s->ps_followup_pending = false;
+            s->ps_followup_count = 0;
         }
     }
 
     OrbisPadData send_data = *data;
-    // Suppress residual physical PS hold during the initial 280ms settle window
-    // (when the user holds PS to turn on DualSense), guaranteeing a clean 0 -> 1 -> 0 PS edge.
-    if ((s->open_time_us != 0 && (now - s->open_time_us) < 280000ULL) ||
+    // Suppress residual physical PS hold during power-on (before AND after the 160ms synthetic pulse
+    // until the user physically releases PS), guaranteeing a crisp 0 -> 1 (160ms) -> 0 short tap!
+    if (s->suppress_poweron_ps ||
+        (s->open_time_us != 0 && (now - s->open_time_us) < 150000ULL) ||
         (s->ps_pulse_active && now < s->ps_pulse_start_us)) {
         send_data.buttons &= ~DS4_BUTTON_PS;
     }
@@ -1751,12 +1793,23 @@ void vpad_poll_rumble(void) {
         }
 
         if (g_slots[i].ps_followup_pending && now_pulse >= g_slots[i].ps_followup_at_us) {
-            g_slots[i].ps_followup_pending = false;
             // Fire fallback follow-up pulse only if user didn't interact and no new user logged in
             if (!g_slots[i].user_interacted &&
-                ((i >= 1 && s_last_login_count <= g_slots[i].slot_open_login_count) || s_last_login_count <= 0)) {
-                daemon_log(LOG_LEVEL_INFO, "vpad_poll_rumble: Firing follow-up PS pulse for slot %d after settle", i);
+                !g_slots[i].bound_to_user &&
+                s_last_login_count <= g_slots[i].slot_open_login_count) {
+                daemon_log(LOG_LEVEL_INFO, "vpad_poll_rumble: Firing follow-up PS pulse for slot %d (remaining=%d)",
+                           i, g_slots[i].ps_followup_count - 1);
                 vpad_schedule_ps_pulse_slot(i, 0, 160000ULL);
+                if (g_slots[i].ps_followup_count > 1) {
+                    g_slots[i].ps_followup_count--;
+                    g_slots[i].ps_followup_at_us = now_pulse + 1800000ULL;
+                } else {
+                    g_slots[i].ps_followup_pending = false;
+                    g_slots[i].ps_followup_count = 0;
+                }
+            } else {
+                g_slots[i].ps_followup_pending = false;
+                g_slots[i].ps_followup_count = 0;
             }
         }
     }

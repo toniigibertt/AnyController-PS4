@@ -162,7 +162,11 @@ int main(int argc, char *argv[]) {
                g_daemon_config.trigger_threshold,
                g_daemon_config.enable_rumble);
 
-    // 3. Notify user on screen immediately
+    // 3. Pre-warm libSceMbus, libScePad, and libSceUserService at daemon boot
+    // so the very first DualSense / USB controller connection after GoldHEN loads is instantaneous
+    vpad_prewarm_subsystem();
+
+    // 4. Notify user on screen immediately
     daemon_notify("AnyController " ONEFAMILY_VERSION_STRING " Activo (ES)");
 
     // 4. Initialize USB Driver Subsystem

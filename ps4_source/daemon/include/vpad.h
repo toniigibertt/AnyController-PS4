@@ -41,6 +41,7 @@ int  vpad_get_assigned_slot_num(int slot);
 const char* vpad_get_assigned_user_slot(int slot);
 
 // Subsystem Lifecycle (initializes / unloads PRXs)
+void vpad_prewarm_subsystem(void);
 int  vpad_init(void);
 void vpad_shutdown(void);
 bool vpad_is_active(void);

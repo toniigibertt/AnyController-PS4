@@ -1192,10 +1192,10 @@ static void decode_dualsense_bt_report(BtDevice* dev, const uint8_t* report, siz
             vpad_reactivate_slot(dev->vpad_slot);
             dev->last_calibration_attempt = now_conn;
             if (dev->profile.dualsense_bt_mode == 1) {
-                if (!dev->capacity_patched && !dev->capacity_failed) {
+                if (!dev->capacity_failed) {
                     apply_controller_capacity(dev, 0);
                 }
-                if (dev->capacity_patched && !dev->initialized_output) {
+                if (dev->capacity_patched) {
                     bt_send_rumble_dev(dev, 0, 0, dev->last_color);
                 }
             }
@@ -1594,9 +1594,7 @@ void bt_driver_poll_step(void) {
                     existing->output_errors = 0;
                     existing->output_unsupported = false;
                     existing->next_output_retry_us = 0;
-                    if (existing->profile.dualsense_bt_mode == 1) {
-                        apply_controller_capacity(existing, 0);
-                    }
+                    existing->last_raw_len = 0;
                     if (existing->connected) {
                         existing->needs_reinit = true;
                     }
@@ -1654,11 +1652,12 @@ void bt_driver_poll_step(void) {
 
     uint64_t now_us = daemon_sys_time_us();
 
-    // 2. Fallback poll for any quiet connected controller (>= 12ms since last packet)
-    // Ensures Controllers 2, 3, and 4 stay responsive even while Controller 1 floods kevents.
+    // 2. Fallback poll for any quiet or newly-connecting controller
+    // Ensures Controllers 1..4 connect on the very first report after 0x18 and stay responsive under heavy kevent traffic.
     for (int i = 0; i < BT_MAX_DEVICES; ++i) {
         BtDevice *dev = &s_devices[i];
-        if (!dev->address || got_packet[i] || (now_us - dev->last_input_time < 12000ULL)) continue;
+        uint64_t poll_interval_us = dev->connected ? 12000ULL : 4000ULL;
+        if (!dev->address || got_packet[i] || (now_us - dev->last_input_time < poll_interval_us)) continue;
 
         uint8_t report[80];
         memset(report, 0, sizeof(report));
@@ -1671,7 +1670,7 @@ void bt_driver_poll_step(void) {
 
         long result = daemon_syscall(SYS_IOCTL, s_bt_fd, 0x80206233UL, (long)&req);
         if (result > 0 && result <= (long)sizeof(report)) {
-            if (result != dev->last_raw_len || memcmp(report, dev->last_raw_report, (size_t)result) != 0) {
+            if (!dev->connected || result != dev->last_raw_len || memcmp(report, dev->last_raw_report, (size_t)result) != 0) {
                 memcpy(dev->last_raw_report, report, (size_t)result);
                 dev->last_raw_len = result;
                 got_packet[i] = true;

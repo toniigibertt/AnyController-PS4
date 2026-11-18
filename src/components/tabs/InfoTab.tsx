@@ -1,6 +1,6 @@
 /**
- * Controller Control Center PS4 - Pestaña de Sistema, Red y Descargas (v1.5.3)
- * Documentación completa, visor/importador .INI por mando y notas de versión 1.5.3.
+ * Controller Control Center PS4 - Pestaña de Sistema, Red y Descargas (v1.5.4)
+ * Documentación completa, visor/importador .INI por mando y notas de versión 1.5.4.
  */
 import { useState } from 'react';
 import { AppConfig, ControllerTargetMeta } from '../../types';
@@ -72,7 +72,7 @@ export default function InfoTab({
           { id: 'overview', label: 'Resumen y Descargas', icon: Info },
           { id: 'guides', label: 'Guía y Memoria por Mando', icon: BookOpen },
           { id: 'ini', label: 'Visor y Editor .INI', icon: FileText },
-          { id: 'changelog', label: 'Novedades v1.5.3', icon: Sparkles },
+          { id: 'changelog', label: 'Novedades v1.5.4', icon: Sparkles },
         ].map((sec) => {
           const Icon = sec.icon;
           const isSelected = activeSection === sec.id;
@@ -107,7 +107,7 @@ export default function InfoTab({
                   Controller Control Center PS4
                 </h3>
                 <span className="text-xs text-cyan-300 font-mono">
-                  v1.5.3 (01.53) · ID: TONI88888 · ANYCONTROLLER
+                  v1.5.4 (01.54) · ID: TONI88888 · ANYCONTROLLER
                 </span>
               </div>
             </div>
@@ -179,7 +179,7 @@ export default function InfoTab({
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Download className="w-4 h-4 text-cyan-400" />
-                Descargas Oficiales v1.5.3 Listas para Instalar en PS4
+                Descargas Oficiales v1.5.4 Listas para Instalar en PS4
               </h3>
               <p className="text-xs text-slate-400 mt-1">
                 Paquetes compilados, validados y listos para copiar por USB o FTP a tu consola.
@@ -191,28 +191,28 @@ export default function InfoTab({
                 <div className="flex flex-wrap items-center gap-2">
                   <Sparkles className="w-4 h-4 text-emerald-400" />
                   <span className="text-sm font-bold text-white">
-                    Pack Todo-en-Uno v1.5.3 (Recomendado)
+                    Pack Todo-en-Uno v1.5.4 (Recomendado)
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
-                  Incluye <strong>Controller_Control_Center_PS4_v1.5.3.pkg</strong>, el payload{' '}
+                  Incluye <strong>Controller_Control_Center_PS4_v1.5.4.pkg</strong>, el payload{' '}
                   <strong>anycontroller.bin</strong> y <strong>anycontroller.ini</strong>.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={async () => {
-                  onShowToast('Descargando Pack Todo-en-Uno v1.5.3...');
+                  onShowToast('Descargando Pack Todo-en-Uno v1.5.4...');
                   await downloadBinaryFile(
-                    '/Controller_Control_Center_PS4_Pack_v1.5.3.zip',
-                    'Controller_Control_Center_PS4_Pack_v1.5.3.zip'
+                    '/Controller_Control_Center_PS4_Pack_v1.5.4.zip',
+                    'Controller_Control_Center_PS4_Pack_v1.5.4.zip'
                   );
-                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.5.3.zip descargado!');
+                  onShowToast('¡Controller_Control_Center_PS4_Pack_v1.5.4.zip descargado!');
                 }}
                 className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Descargar Pack v1.5.3 (.ZIP)</span>
+                <span>Descargar Pack v1.5.4 (.ZIP)</span>
               </button>
             </div>
 
@@ -220,17 +220,17 @@ export default function InfoTab({
               <button
                 type="button"
                 onClick={async () => {
-                  onShowToast('Descargando Controller_Control_Center_PS4_v1.5.3.pkg...');
+                  onShowToast('Descargando Controller_Control_Center_PS4_v1.5.4.pkg...');
                   await downloadBinaryFile(
-                    '/Controller_Control_Center_PS4_v1.5.3.pkg',
-                    'Controller_Control_Center_PS4_v1.5.3.pkg'
+                    '/Controller_Control_Center_PS4_v1.5.4.pkg',
+                    'Controller_Control_Center_PS4_v1.5.4.pkg'
                   );
-                  onShowToast('¡Controller_Control_Center_PS4_v1.5.3.pkg descargado!');
+                  onShowToast('¡Controller_Control_Center_PS4_v1.5.4.pkg descargado!');
                 }}
                 className="flex items-center justify-between p-3.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
-                  <span>Descargar .PKG v1.5.3</span>
+                  <span>Descargar .PKG v1.5.4</span>
                   <span className="text-[10px] text-slate-900 font-mono">
                     Validado OpenOrbis
                   </span>
@@ -281,19 +281,19 @@ export default function InfoTab({
               <button
                 type="button"
                 onClick={async () => {
-                  onShowToast('Descargando código fuente v1.5.3...');
+                  onShowToast('Descargando código fuente v1.5.4...');
                   await downloadBinaryFile(
-                    '/Controller_Control_Center_PS4_Source_v1.5.3.zip',
-                    'Controller_Control_Center_PS4_Source_v1.5.3.zip'
+                    '/Controller_Control_Center_PS4_Source_v1.5.4.zip',
+                    'Controller_Control_Center_PS4_Source_v1.5.4.zip'
                   );
-                  onShowToast('¡Código fuente v1.5.3 descargado!');
+                  onShowToast('¡Código fuente v1.5.4 descargado!');
                 }}
                 className="flex items-center justify-between p-3.5 rounded-lg bg-[#070B14] hover:bg-slate-900 text-slate-200 font-bold text-xs border border-slate-800 transition-colors cursor-pointer"
               >
                 <div className="flex flex-col text-left">
                   <span>Código Fuente (.ZIP)</span>
                   <span className="text-[10px] text-slate-400 font-mono">
-                    C / C++ v1.5.3
+                    C / C++ v1.5.4
                   </span>
                 </div>
                 <Download className="w-4 h-4 text-indigo-400 shrink-0" />
@@ -309,7 +309,7 @@ export default function InfoTab({
           <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-cyan-400" />
-              Cómo funciona la Memoria Independiente por Mando (v1.5.3)
+              Cómo funciona la Memoria Independiente por Mando (v1.5.4)
             </h3>
             <ul className="list-disc list-inside text-xs text-slate-300 space-y-1.5 pl-1">
               <li>
@@ -408,39 +408,39 @@ export default function InfoTab({
         </div>
       )}
 
-      {/* SECTION 4: CHANGELOG v1.5.3 */}
+      {/* SECTION 4: CHANGELOG v1.5.4 */}
       {activeSection === 'changelog' && (
         <div className="p-5 rounded-xl bg-[#0B1120] border border-slate-800 space-y-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Terminal className="w-4 h-4 text-cyan-400" />
-            Novedades Controller Control Center PS4 v1.5.3 (01.53)
+            Novedades Controller Control Center PS4 v1.5.4 (01.54)
           </h3>
 
           <div className="space-y-3 text-xs text-slate-300 divide-y divide-slate-800">
             <div className="pt-2">
               <h4 className="font-bold text-cyan-300">
-                1. Aislamiento Total DualSense 1 + 2 ("Cero Conexiones a la Nada")
+                1. Conexión Instantánea en Arranque en Frío (Pre-calentamiento Mbus/Pad)
               </h4>
               <p className="text-slate-400 mt-1">
-                Corregida la interferencia del gestor de barra LED DualShock 4 durante el arranque Bluetooth: validación por <code className="font-mono text-slate-200">Device ID</code> y <code className="font-mono text-slate-200">bound_user_id</code> para no tocar jamás handles de mandos virtuales, eliminación de la doble pulsación PS y limpieza de pila en carga de perfiles (<code className="font-mono text-slate-200">config.c</code>).
+                Inicialización anticipada de <code className="font-mono text-slate-200">libSceMbus</code>, <code className="font-mono text-slate-200">libScePad</code> y <code className="font-mono text-slate-200">libSceUserService</code> al cargar el payload en GoldHEN (<code className="font-mono text-slate-200">vpad_prewarm_subsystem</code>). Elimina el retraso de minutos en el primer arranque tras días sin encender la consola.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                2. Apagado Limpio del DualShock 4 y Flanco PS Puro al Conectar
+                2. Supresión Inteligente del Botón PS de Encendido y Reintento Automático
               </h4>
               <p className="text-slate-400 mt-1">
-                Ventana de estabilización de <code className="font-mono text-slate-200">280 ms</code> que evita que mantener pulsado el botón PS al encender el DualSense arruine la transición nativa en Jugador 1 (<code className="font-mono text-slate-200">¿Quién está usando este mando?</code>) o el relevo automático del DS4 en modo Merge.
+                Nuevo filtro <code className="font-mono text-slate-200">suppress_poweron_ps</code> que garantiza un pulso corto limpio de <code className="font-mono text-slate-200">160 ms</code> a los <code className="font-mono text-slate-200">150 ms</code> de conectar aunque el usuario siga manteniendo pulsado el botón PS físico al encender el DualSense, respaldado por reintentos automáticos (<code className="font-mono text-slate-200">+1.5 s</code> y <code className="font-mono text-slate-200">+3.3 s</code>) si <code className="font-mono text-slate-200">SceShellUI</code> estaba ocupado.
               </p>
             </div>
 
             <div className="pt-3">
               <h4 className="font-bold text-emerald-400">
-                3. Colores RGB DualShock 4, TV Safe Area 1080p y Mandos 2D Originales
+                3. Estabilidad Bluetooth DualSense 1 + 2 y Colores RGB DualShock 4
               </h4>
               <p className="text-slate-400 mt-1">
-                Conserva intactos los colores/brillo/vibración persistentes del DualShock 4, el visor 2D original PS5 DualSense y PS4 DualShock 4 sin solapamiento de botones, el selector manual de jugador y la memoria independiente por MAC (<code className="font-mono text-slate-200">ds_mac_*.ini</code>) y ranura (<code className="font-mono text-slate-200">ds4_slot_*.ini</code>).
+                Sondeo rápido de <code className="font-mono text-slate-200">4 ms</code> al recibir el evento de enlace <code className="font-mono text-slate-200">0x18</code>, parche de capacidad <code className="font-mono text-slate-200">78 bytes</code> sincronizado tras el primer paquete HID y protección contra pulsaciones PS accidentales en reconexiones breves.
               </p>
             </div>
           </div>
